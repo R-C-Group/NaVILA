@@ -53,6 +53,20 @@ pip install huggingface_hub
 * 到[网站](https://huggingface.co/settings/tokens)，获取token
 * 运行脚本`python download_huggingface.py`
 
+```python
+from huggingface_hub import snapshot_download
+
+local_dir = snapshot_download(
+    repo_id="a8cheng/navila-llama3-8b-8f",
+    local_dir="/home/guanweipeng/NaVILA/navila-llama3-8b-8f",
+    cache_dir="/home/guanweipeng/NaVILA/navila-llama3-8b-8f/cache",
+    token="hf_******",     # ✅ 在这里传 token
+    endpoint="https://hf-mirror.com"   # 如果需要走镜像
+)
+
+print("模型下载到本地路径:", local_dir)
+```
+
 ## 实验测试
 
 
