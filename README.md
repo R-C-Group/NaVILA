@@ -9,6 +9,8 @@
   <a href="https://github.com/AnjieCheng/NaVILA">Github-VLA</a>
   | 
   <a href="https://github.com/yang-zj1026/legged-loco">Github-low-level</a>
+  | 
+  <a href="https://github.com/yang-zj1026/NaVILA-Bench">NaVILA-Bench</a>
   |<a href="https://navila-bot.github.io/">Website</a>
   | <a href="https://navila-bot.github.io/static/navila_paper.pdf">Paper</a>
   </h3>
@@ -41,6 +43,8 @@ python -m pip install -r habitat_baselines/rl/ddppo/requirements.txt
 python setup.py develop --all
 ```
 
+* Habitat-Sim的源码编译[参考](https://github.com/facebookresearch/habitat-sim/blob/v0.1.7/BUILD_FROM_SOURCE.md)
+
 ### Hugging Face下载模型
 * 模型地址[a8cheng/navila-llama3-8b-8f](https://huggingface.co/a8cheng/navila-llama3-8b-8f/tree/main)
 * 安装库
@@ -72,3 +76,7 @@ print("模型下载到本地路径:", local_dir)
 ## 实验测试
 
 
+
+# 参考资料
+* [habitat-sim](https://github.com/facebookresearch/habitat-sim/tree/v0.1.7#installation)
+* [habitat-lab](https://github.com/facebookresearch/habitat-lab)
