@@ -29,7 +29,7 @@ conda activate navila-eval
 
 ```bash
 # 安装Habitat-Sim 0.1.7，但下面只支持python3.6~3.9，用的3.10需要源码安装
-conda install -c aihabitat -c conda-forge habitat-sim=0.1.7 headless
+# conda install -c aihabitat -c conda-forge habitat-sim=0.1.7 headless
 
 # 安装Habitat-Lab
 git clone --branch v0.1.7 git@github.com:facebookresearch/habitat-lab.git
@@ -42,11 +42,24 @@ python -m pip install -r habitat_baselines/rl/ddppo/requirements.txt
 python setup.py develop --all
 ```
 
-为了解决NumPy的问题，运行下面：
 
-~~~
-python evaluation/scripts/habitat_sim_autofix.py 
-~~~
+* 对于Habitat-sim的源码安装，参考[Link](https://github.com/facebookresearch/habitat-sim/blob/v0.1.7/BUILD_FROM_SOURCE.md)
+
+```bash
+git clone git@github.com:facebookresearch/habitat-sim.git #（默认就是v0.1.7）或者使用https://github.com/facebookresearch/habitat-sim.git
+cd habitat-sim
+conda activate navila-eval
+# 为了解决NumPy的问题，运行下面：
+python evaluation/scripts/habitat_sim_autofix.py # 更改common.py
+
+pip install -r requirements.txt
+# 如果出现路径问题编译不成功，可能因为之前编译过了，进入到habitat-sim目录删除build(rm -rf build)
+
+# python setup.py install
+# python setup.py install --headless # without an attached display
+python setup.py install --headless --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+```
+
 
 * Habitat-Sim的源码编译[参考](https://github.com/facebookresearch/habitat-sim/blob/v0.1.7/BUILD_FROM_SOURCE.md)
 
