@@ -1,5 +1,3 @@
- [comment]: <>
-
  <h1 align="center"> NaVILA复现
   </h1>
 
