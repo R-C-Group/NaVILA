@@ -39,9 +39,16 @@ cd habitat-lab
 # installs both habitat and habitat_baselines
 python -m pip install -r requirements.txt
 python -m pip install -r habitat_baselines/rl/requirements.txt
+# 注意，其中的tensorflow==1.13.1似乎已经不支持安装了，改为tensorflow>=2.8.0
 python -m pip install -r habitat_baselines/rl/ddppo/requirements.txt
 python setup.py develop --all
 ```
+
+为了解决NumPy的问题，运行下面：
+
+~~~
+python evaluation/scripts/habitat_sim_autofix.py 
+~~~
 
 * Habitat-Sim的源码编译[参考](https://github.com/facebookresearch/habitat-sim/blob/v0.1.7/BUILD_FROM_SOURCE.md)
 
