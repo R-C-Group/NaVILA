@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -18,26 +18,26 @@ struct RenderAssetInstanceCreationInfo;
 }  // namespace assets
 namespace scene {
 class SceneNode;
-class SceneGraph;
-}  // namespace scene
+}
 namespace gfx {
-struct Rig;
 namespace replay {
-
-const int DEFAULT_MAX_DECIMAL_PLACES = 7;
 
 class NodeDeletionHelper;
 
 /**
  * @brief Recording for "render replay".
  *
+ * This class is work in progress (writeSavedKeyframesToFile isn't implemented
+ * yet).
+ *
  * This class saves and serializes render keyframes. A render keyframe is a
  * visual snapshot of a scene. It includes the visual parts of a scene, such
  * that observations can be reproduced (from the same camera perspective or a
  * different one). The render keyframe includes support for named "user
  * transforms" which can be used to store cameras, agents, or other
- * application-specific objects. See also @ref Player. See
- * examples/replay_tutorial.py for usage of this class through bindings.
+ * application-specific objects. See also @ref Player (coming soon). See
+ * examples/replay_tutorial.py for usage of this class through bindings (coming
+ * soon).
  */
 class Recorder {
  public:
@@ -62,24 +62,6 @@ class Recorder {
   void onLoadRenderAsset(const esp::assets::AssetInfo& assetInfo);
 
   /**
-   * @brief User code should call this upon instantiating a skinned asset rig to
-   * inform Recorder about it.
-   * @param rigId Id of the rig that was instantiated.
-   * @param rig Rig that was instantiated.
-   */
-  void onCreateRigInstance(int rigId, const Rig& rig);
-
-  /**
-   * @brief Record deletion of all render instances in a scene graph.
-   * Because scene graphs are currently leaked when the active scene changes, we
-   * cannot rely on node deletion to issue gfx-replay deletion entries. This
-   * function allows to circumvent this issue.
-   * The scene graph leak occurs in createSceneInstance(), in Simulator.cpp.
-   * @param sceneGraph The scene graph being hidden.
-   */
-  void onHideSceneGraph(const esp::scene::SceneGraph& sceneGraph);
-
-  /**
    * @brief Save/capture a render keyframe (a visual snapshot of the scene).
    *
    * User code can call this any time, but the intended usage is to save a
@@ -87,13 +69,6 @@ class Recorder {
    * See also writeSavedKeyframesToFile.
    */
   void saveKeyframe();
-
-  Keyframe extractKeyframe();
-
-  /**
-   * @brief Returns the last saved keyframe.
-   */
-  const Keyframe& getLatestKeyframe();
 
   /**
    * @brief Add a named "user transform" which can be used to store cameras,
@@ -115,66 +90,22 @@ class Recorder {
                                   const Magnum::Quaternion& rotation);
 
   /**
-   * @brief Add a light to the current keyframe.
-   *
-   * @param lightInfo Parameters of the light to be added to the keyframe.
-   */
-  void addLightToKeyframe(const LightInfo& lightInfo);
-
-  /**
-   * @brief Delete all lights from the current keyframe.
-   */
-  void clearLightsFromKeyframe();
-
-  /**
    * @brief write saved keyframes to file.
    * @param filepath
-   *
-   * If you prefer more readable json, set usePrettyWriter to true, but beware
-   * larger filesize.
    */
-  void writeSavedKeyframesToFile(const std::string& filepath,
-                                 bool usePrettyWriter = false);
+  void writeSavedKeyframesToFile(const std::string& filepath);
 
   /**
-   * @brief write saved keyframes to string. '{"keyframes": [{...},{...},...]}'
+   * @brief write saved keyframes to string.
    */
   std::string writeSavedKeyframesToString();
-
-  /**
-   * @brief write saved keyframes as individual strings ['{"keyframe": ...}',
-   * '{"keyframe": ...}', ...]
-   *
-   * Use this function if you are using keyframes incrementally, e.g.
-   * repeated calls to this function and feeding them to a renderer. Contrast
-   * with writeSavedKeyframesToFile, which "consolidates" before discarding old
-   * keyframes to avoid losing state information.
-   */
-  std::vector<std::string> writeIncrementalSavedKeyframesToStringArray();
-
-  /**
-   * @brief Set the precision of the floating points serialized by this
-   * recorder.
-   */
-  void setMaxDecimalPlaces(int maxDecimalPlaces);
-
-  /**
-   * @brief Get the precision of the floating points serialized by this
-   * recorder.
-   */
-  int getMaxDecimalPlaces() const;
-
-  /**
-   * @brief returns JSONized version of given keyframe.
-   */
-  std::string keyframeToString(const Keyframe& keyframe) const;
 
   /**
    * @brief Reserved for unit-testing.
    */
   const std::vector<Keyframe>& debugGetSavedKeyframes() const {
     return savedKeyframes_;
-  };
+  }
 
  private:
   // NodeDeletionHelper calls onDeleteRenderAssetInstance
@@ -185,9 +116,7 @@ class Recorder {
     scene::SceneNode* node = nullptr;
     RenderAssetInstanceKey instanceKey = ID_UNDEFINED;
     Corrade::Containers::Optional<RenderAssetInstanceState> recentState;
-    Corrade::Containers::Optional<InstanceMetadata> metadata;
     NodeDeletionHelper* deletionHelper = nullptr;
-    int rigId = ID_UNDEFINED;
   };
 
   using KeyframeIterator = std::vector<Keyframe>::const_iterator;
@@ -199,10 +128,7 @@ class Recorder {
   RenderAssetInstanceKey getNewInstanceKey();
   int findInstance(const scene::SceneNode* queryNode);
   RenderAssetInstanceState getInstanceState(const scene::SceneNode* node);
-  InstanceMetadata getInstanceMetadata(const scene::SceneNode* node);
-  void updateStates();
   void updateInstanceStates();
-  void updateRigInstanceStates();
   void checkAndAddDeletion(Keyframe* keyframe,
                            RenderAssetInstanceKey instanceKey);
   void addLoadsCreationsDeletions(KeyframeIterator begin,
@@ -214,11 +140,6 @@ class Recorder {
   Keyframe currKeyframe_;
   std::vector<Keyframe> savedKeyframes_;
   RenderAssetInstanceKey nextInstanceKey_ = 0;
-  std::unordered_map<int, std::vector<scene::SceneNode*>> rigNodes_;
-  std::unordered_map<int, std::vector<Magnum::Matrix4>> rigNodeTransformCache_;
-  int maxDecimalPlaces_ = DEFAULT_MAX_DECIMAL_PLACES;
-
-  ESP_SMART_POINTERS(Recorder)
 };
 
 }  // namespace replay

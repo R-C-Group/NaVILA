@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -11,54 +11,60 @@
  */
 
 #include <Corrade/Containers/Optional.h>
-#include <Magnum/GL/GL.h>
+#include <Corrade/Containers/Reference.h>
+#include <Magnum/GL/Mesh.h>
+#include <Magnum/Magnum.h>
+#include <Magnum/Math/Color.h>
 #include <Magnum/Math/Range.h>
+#include <Magnum/Mesh.h>
 #include <Magnum/Trade/MeshData.h>
 #include "CollisionMeshData.h"
 #include "MeshData.h"
-#include "esp/core/Esp.h"
+#include "esp/core/esp.h"
+#include "esp/gfx/magnum.h"
 
-namespace Cr = Corrade;
-namespace Mn = Magnum;
 namespace esp {
-namespace scene {
-class SemanticObject;
-}  // namespace scene
 namespace assets {
 
 /**
   @brief Enumeration of mesh types supported by the simulator.
 
   Each entry suggests a derived class of @ref BaseMesh implementing the specific
-  storage and processing interface to accommodate differing asset formats.
+  storage and processing interface to accomodate differing asset formats.
   Identifies the derived variant of this object.
   */
 enum SupportedMeshType {
   /**
-   * @brief Undefined mesh types are created programmatically without a specific
-   * format or loaded from an unknown format. Support for this type and behavior
+   * Undefined mesh types are created programmatically without a specific
+   * format or loaded from an unkown format. Support for this type and behavior
    * is likely limited. Object type is likely @ref BaseMesh.
    */
-  NOT_DEFINED = ID_UNDEFINED,
+  NOT_DEFINED = -1,
 
   /**
-   * @brief Instance meshes loaded from sources including segmented object
+   * Instance meshes loaded from sources including segmented object
    * identifier data (e.g. semantic data: chair, table, etc...). Sources include
    * .ply files and reconstructions of Matterport scans. Object is likely of
-   * type @ref GenericSemanticMeshData.
+   * type @ref GenericInstanceMeshData or Mp3dInstanceMeshData.
    */
   INSTANCE_MESH = 0,
-  /**
-   * @brief Meshes loaded from gltf format (i.e. .glb file), or instances of
-   * Magnum
-   * Primitives. Object is likely type @ref GenericMeshData.
-   */
-  GENERIC_MESH = 1,
 
   /**
-   * @brief Number of enumerated supported types.
+   * Meshes loaded from Replica dataset. Object is likely type @ref
+   * PTexMeshData.
    */
-  NUM_SUPPORTED_MESH_TYPES = 2,
+  PTEX_MESH = 1,
+
+  /**
+   * Meshes loaded from gltf format (i.e. .glb file), or instances of Magnum
+   * Primitives. Object is likely type @ref GenericMeshData.
+   */
+  GENERIC_MESH = 2,
+
+  /**
+   * Number of enumerated supported types.
+   */
+  NUM_SUPPORTED_MESH_TYPES = 3,
 };
 
 /**
@@ -76,7 +82,7 @@ class BaseMesh {
   explicit BaseMesh(SupportedMeshType type) : type_(type){};
 
   /** @brief Destructor */
-  virtual ~BaseMesh() = default;
+  virtual ~BaseMesh(){};
 
   /**
    * @brief Set the @ref SupportedMeshType, @ref type_, of this object.
@@ -115,10 +121,6 @@ class BaseMesh {
    * sub-component of the asset.
    */
   virtual Magnum::GL::Mesh* getMagnumGLMesh(int) { return nullptr; }
-
-  /**
-   * @brief Retrieve a reference to the @p meshData_ for this mesh;
-   */
   Corrade::Containers::Optional<Magnum::Trade::MeshData>& getMeshData() {
     return meshData_;
   }
@@ -135,6 +137,14 @@ class BaseMesh {
   }
 
   /**
+   * @brief Any transformations applied to the original mesh after loading are
+   * stored here.
+   *
+   * See @ref ResourceManager::translateMesh.
+   */
+  Magnum::Matrix4 meshTransform_;
+
+  /**
    * @brief Axis aligned bounding box of the mesh.
    *
    * Computed automatically on mesh load. See @ref
@@ -144,42 +154,13 @@ class BaseMesh {
 
  protected:
   /**
-   * @brief Build a colormap to use either from mapping given list of per-vertex
-   * object IDs to per-vertex Colors, or through a mapping of a Magnum-provided
-   * color map depending on value of @p useVertexColors .
-   * @param vertIDs Per-vertex ids from mesh
-   * @param vertColors Per-vertex colors from mesh
-   * @param useVertexColors Whether or not to use vertex colors in mesh for
-   * color map
-   * @param [out] colorMapToUse The mapping of semantic ID to color
-   */
-  void buildColorMapToUse(
-      Corrade::Containers::Array<Magnum::UnsignedInt>& vertIDs,
-      const Cr::Containers::Array<Mn::Color3ub>& vertColors,
-      bool useVertexColors,
-      std::vector<Mn::Vector3ub>& colorMapToUse) const;
-
-  /**
-   * @brief Populate an array of colors of the correct type from colors held in
-   * the given
-   * @p srcMeshData. Generally used for semantic processing/rendering.
-   * @param srcMeshData The meshdata containing the colors we wish to query
-   * @param convertToSRGB Whether the source vertex colors from the @p
-   * srcMeshData should be converted to SRGB
-   * @param [out] destColors The per-element array of colors to be built.
-   */
-  void convertMeshColors(const Mn::Trade::MeshData& srcMeshData,
-                         bool convertToSRGB,
-                         Cr::Containers::Array<Mn::Color3ub>& destColors) const;
-
-  /**
    * @brief Identifies the derived type of this object and the format of the
    * asset.
    */
   SupportedMeshType type_ = SupportedMeshType::NOT_DEFINED;
 
   /**
-   * @brief Whether or not the mesh data has been transferred to GPU.
+   * @brief Whether or not the mesh data has been transfered to GPU.
    */
   bool buffersOnGPU_ = false;
 

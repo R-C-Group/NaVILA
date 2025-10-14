@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -7,30 +7,31 @@
 
 #include <Corrade/Utility/Assert.h>
 
-#include <utility>
-
-#include "AbstractObjectAttributesManager.h"
-#include "esp/metadata/attributes/ObjectAttributes.h"
+#include "AbstractObjectAttributesManagerBase.h"
+#include "AssetAttributesManager.h"
 
 namespace esp {
 namespace metadata {
 namespace managers {
-
 /**
  * @brief single instance class managing templates describing physical objects
  */
 class ObjectAttributesManager
-    : public AbstractObjectAttributesManager<attributes::ObjectAttributes,
-                                             ManagedObjectAccess::Copy> {
+    : public AbstractObjectAttributesManager<attributes::ObjectAttributes> {
  public:
   ObjectAttributesManager()
-      : AbstractObjectAttributesManager<attributes::ObjectAttributes,
-                                        ManagedObjectAccess::Copy>::
-            AbstractObjectAttributesManager("Object", "object_config.json") {
-    // build this manager's copy constructor map
-    this->copyConstructorMap_["ObjectAttributes"] =
-        &ObjectAttributesManager::createObjCopyCtorMapEntry<
-            attributes::ObjectAttributes>;
+      : AbstractObjectAttributesManager<attributes::ObjectAttributes>::
+            AbstractObjectAttributesManager(
+                "Object",
+                "object_config.json") {  // was phys_properties.json
+    buildCtorFuncPtrMaps();
+  }
+
+  void setAssetAttributesManager(
+      AssetAttributesManager::cptr assetAttributesMgr) {
+    assetAttributesMgr_ = assetAttributesMgr;
+    // Create default primitive-based object attributess
+    createDefaultPrimBasedAttributesTemplates();
   }
 
   /**
@@ -58,6 +59,16 @@ class ObjectAttributesManager
    */
   void setValsFromJSONDoc(attributes::ObjectAttributes::ptr attribs,
                           const io::JsonGenericValue& jsonConfig) override;
+
+  /**
+   * @brief Check if currently configured primitive asset template library has
+   * passed handle.
+   * @param handle String name of primitive asset attributes desired
+   * @return whether handle exists or not in asset attributes library
+   */
+  bool isValidPrimitiveAttributes(const std::string& handle) override {
+    return assetAttributesMgr_->getObjectLibHasHandle(handle);
+  }
 
   // ======== File-based and primitive-based partition functions ========
 
@@ -91,16 +102,14 @@ class ObjectAttributesManager
    * templates
    * @param contains whether to search for keys containing, or not containing,
    * subStr
-   * @param sorted whether the return vector values are sorted
    * @return vector of 0 or more template handles containing the passed
    * substring
    */
   std::vector<std::string> getFileTemplateHandlesBySubstring(
       const std::string& subStr = "",
-      bool contains = true,
-      bool sorted = true) const {
+      bool contains = true) const {
     return this->getObjectHandlesBySubStringPerType(physicsFileObjTmpltLibByID_,
-                                                    subStr, contains, sorted);
+                                                    subStr, contains);
   }
 
   /**
@@ -133,27 +142,15 @@ class ObjectAttributesManager
    * templates
    * @param contains whether to search for keys containing, or not containing,
    * subStr
-   * @param sorted whether the return vector values are sorted
    * @return vector of 0 or more template handles containing the passed
    * substring
    */
   std::vector<std::string> getSynthTemplateHandlesBySubstring(
       const std::string& subStr = "",
-      bool contains = true,
-      bool sorted = true) const {
+      bool contains = true) const {
     return this->getObjectHandlesBySubStringPerType(
-        physicsSynthObjTmpltLibByID_, subStr, contains, sorted);
+        physicsSynthObjTmpltLibByID_, subStr, contains);
   }
-
-  /**
-   * @brief This function will be called to finalize attributes' paths before
-   * registration, moving fully qualified paths to the appropriate hidden
-   * attribute fields. This can also be called without registration to make sure
-   * the paths specified in an attributes are properly configured.
-   * @param attributes The attributes to be filtered.
-   */
-  void finalizeAttrPathsBeforeRegister(
-      const attributes::ObjectAttributes::ptr& attributes) const override;
 
   // ======== End File-based and primitive-based partition functions ========
 
@@ -162,7 +159,7 @@ class ObjectAttributesManager
    * @brief Create and save default primitive asset-based object templates,
    * saving their handles as non-deletable default handles.
    */
-  void createDefaultPrimBasedAttributesTemplates() override;
+  void createDefaultPrimBasedAttributesTemplates();
 
   /**
    * @brief Perform file-name-based attributes initialization. This is to
@@ -182,17 +179,17 @@ class ObjectAttributesManager
       attributes::ObjectAttributes::ptr attributes,
       bool setFrame,
       const std::string& meshHandle,
-      const std::function<void(AssetType)>& assetTypeSetter) override;
+      std::function<void(int)> assetTypeSetter) override;
 
   /**
-   * @brief Used Internally.  Create and configure newly-created attributes
-   * with any default values, before any specific values are set.
+   * @brief Used Internally.  Create and configure newly-created attributes with
+   * any default values, before any specific values are set.
    *
    * @param handleName handle name to be assigned to attributes
-   * @param builtFromConfig Whether this object attributes is being
-   * constructed from a config file or from some other source.
-   * @return Newly created but unregistered ObjectAttributes pointer, with
-   * only default values set.
+   * @param builtFromConfig Whether this object attributes is being constructed
+   * from a config file or from some other source.
+   * @return Newly created but unregistered ObjectAttributes pointer, with only
+   * default values set.
    */
   attributes::ObjectAttributes::ptr initNewObjectInternal(
       const std::string& handleName,
@@ -200,15 +197,14 @@ class ObjectAttributesManager
 
   /**
    * @brief This method will perform any necessary updating that is
-   * AbstractAttributesManager-specific upon template removal, such as removing
-   * a specific template handle from the list of file-based template handles in
-   * ObjectAttributesManager.  This should only be called @ref
-   * esp::core::managedContainers::ManagedContainerBase.
+   * attributesManager-specific upon template removal, such as removing a
+   * specific template handle from the list of file-based template handles in
+   * ObjectAttributesManager.  This should only be called internally.
    *
    * @param templateID the ID of the template to remove
    * @param templateHandle the string key of the attributes desired.
    */
-  void deleteObjectInternalFinalize(
+  void updateObjectHandleLists(
       int templateID,
       CORRADE_UNUSED const std::string& templateHandle) override {
     physicsFileObjTmpltLibByID_.erase(templateID);
@@ -216,34 +212,23 @@ class ObjectAttributesManager
   }
 
   /**
-   * @brief This method will perform any essential updating to the managed
-   * object before registration is performed. If this updating fails,
-   * registration will also fail.
+   * @brief Add a copy of @ref  esp::metadata::attributes::AbstractAttributes
+   * object to the @ref objectLibrary_. Verify that render and collision
+   * handles have been set properly.  We are doing this since these values can
+   * be modified by the user.
    *
    * @param attributesTemplate The attributes template.
-   * @param attributesTemplateHandle The key for referencing the template in
-   * the
+   * @param attributesTemplateHandle The key for referencing the template in the
    * @ref objectLibrary_. Will be set as origin handle for template.
    * @param forceRegistration Will register object even if conditional
    * registration checks fail.
-   * @return Whether the preregistration has succeeded and what handle to use to
-   * register the object if it has.
+   * @return The index in the @ref objectLibrary_ of object
+   * template.
    */
-  core::managedContainers::ManagedObjectPreregistration
-  preRegisterObjectFinalize(
+  int registerObjectFinalize(
       attributes::ObjectAttributes::ptr attributesTemplate,
       const std::string& attributesTemplateHandle,
       bool forceRegistration) override;
-
-  /**
-   * @brief This method will perform any final manager-related handling after
-   * successfully registering an object.
-   *
-   * @param objectID the ID of the successfully registered managed object
-   * @param objectHandle The name of the managed object
-   */
-  void postRegisterObjectHandling(int objectID,
-                                  const std::string& objectHandle) override;
 
   /**
    * @brief Any object-attributes-specific resetting that needs to happen on
@@ -254,23 +239,36 @@ class ObjectAttributesManager
     physicsSynthObjTmpltLibByID_.clear();
   }
 
+  /**
+   * @brief This function will assign the appropriately configured function
+   * pointer for the copy constructor as defined in
+   * AttributesManager<ObjectAttributes::ptr>
+   */
+  void buildCtorFuncPtrMaps() override {
+    this->copyConstructorMap_["ObjectAttributes"] =
+        &ObjectAttributesManager::createObjectCopy<
+            attributes::ObjectAttributes>;
+  }  // ObjectAttributesManager::buildCtorFuncPtrMaps()
+
   // ======== Typedefs and Instance Variables ========
 
-  // create a ref to the partition map of either prims or file-based objects to
-  // place a ref to the object template being regsitered during registration.
-  std::unordered_map<int, std::string>* mapToAddTo_ = nullptr;
+  /**
+   * @brief Reference to AssetAttributesManager to give access to primitive
+   * attributes for object construction
+   */
+  AssetAttributesManager::cptr assetAttributesMgr_ = nullptr;
 
   /**
    * @brief Maps loaded object template IDs to the appropriate template
    * handles
    */
-  std::unordered_map<int, std::string> physicsFileObjTmpltLibByID_;
+  std::map<int, std::string> physicsFileObjTmpltLibByID_;
 
   /**
    * @brief Maps synthesized, primitive-based object template IDs to the
    * appropriate template handles
    */
-  std::unordered_map<int, std::string> physicsSynthObjTmpltLibByID_;
+  std::map<int, std::string> physicsSynthObjTmpltLibByID_;
 
  public:
   ESP_SMART_POINTERS(ObjectAttributesManager)

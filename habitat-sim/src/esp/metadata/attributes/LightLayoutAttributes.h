@@ -1,12 +1,11 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_METADATA_ATTRIBUTES_LIGHTLAYOUTATTRIBUTES_H_
 #define ESP_METADATA_ATTRIBUTES_LIGHTLAYOUTATTRIBUTES_H_
 
-#include "AbstractAttributes.h"
-#include "esp/gfx/LightSetup.h"
+#include "AttributesBase.h"
 
 namespace esp {
 namespace metadata {
@@ -14,189 +13,64 @@ namespace attributes {
 
 /**
  * @brief This class describes an instance of a light -
- * its template name, location/direction, color, intensity, type and other
+ * it's template name, location/direction, color, intensity, type and other
  * parameters if appropriate.
  */
 class LightInstanceAttributes : public AbstractAttributes {
  public:
-  explicit LightInstanceAttributes(const std::string& handle = "");
+  LightInstanceAttributes(const std::string& handle = "");
 
-  /** @brief Set the position of the light. Used for positional lights.  */
+  /**
+   * @brief Get/Set the position of the light.
+   */
   void setPosition(const Magnum::Vector3& position) {
-    set("position", position);
+    setVec3("position", position);
   }
+  Magnum::Vector3 getPosition() const { return getVec3("position"); }
 
-  /** @brief Get the position of the light. Used for positional lights. */
-  Magnum::Vector3 getPosition() const {
-    return get<Magnum::Vector3>("position");
-  }
-
-  /** @brief Set the direction of the light. Used for directional lights. */
+  /**
+   * @brief Get/Set the direction of the light.
+   */
   void setDirection(const Magnum::Vector3& direction) {
-    set("direction", direction);
+    setVec3("direction", direction);
   }
-
-  /** @brief Get the direction of the light. Used for directional lights. */
-  Magnum::Vector3 getDirection() const {
-    return get<Magnum::Vector3>("direction");
-  }
-
-  /** @brief Set the color of the light.*/
-  void setColor(const Magnum::Vector3& color) { set("color", color); }
-
-  /** @brief Get the color of the light.*/
-  Magnum::Vector3 getColor() const { return get<Magnum::Vector3>("color"); }
-
-  /** @brief Set the intensity of the light. */
-  void setIntensity(double intensity) { set("intensity", intensity); }
-
-  /** @brief Get the intensity of the light. */
-  double getIntensity() const { return get<double>("intensity"); }
-
-  /** @brief Set the type of the light */
-  void setType(const std::string& type) {
-    // force to lowercase before setting
-    const std::string lightType = Cr::Utility::String::lowercase(type);
-    auto mapIter = LightTypeNamesMap.find(lightType);
-    ESP_CHECK(mapIter != LightTypeNamesMap.end(),
-              "Illegal type value"
-                  << type << ":" << lightType
-                  << "attempted to be set in LightInstanceAttributes:"
-                  << getHandle() << ". Aborting.");
-    setTranslated("type", type);
-  }
-
-  /** @brief Get the type of the light */
-  gfx::LightType getType() const {
-    const std::string val =
-        Cr::Utility::String::lowercase(get<std::string>("type"));
-    auto mapIter = LightTypeNamesMap.find(val);
-    if (mapIter != LightTypeNamesMap.end()) {
-      return mapIter->second;
-    }
-    // point is default value - should never be returned since setter verifies
-    // value
-    return gfx::LightType::Point;
-  }
+  Magnum::Vector3 getDirection() const { return getVec3("direction"); }
 
   /**
-   * @brief Set the string key to the gfx::LightPositionModel to use when
-   * placing the light - whether the lights translation should be relative to
-   * the camera, the global scene origin, or some object.
+   * @brief Get/Set the color of the light.
    */
-  void setPositionModel(const std::string& position_model) {
-    // force to lowercase before setting
-    const std::string posModelLC =
-        Cr::Utility::String::lowercase(position_model);
-    auto mapIter = LightPositionNamesMap.find(posModelLC);
-    ESP_CHECK(mapIter != LightPositionNamesMap.end(),
-              "Illegal position_model value"
-                  << position_model << ":" << posModelLC
-                  << "attempted to be set in LightInstanceAttributes:"
-                  << getHandle() << ". Aborting.");
-    setTranslated("position_model", position_model);
-  }
+  void setColor(const Magnum::Vector3& color) { setVec3("color", color); }
+  Magnum::Vector3 getColor() const { return getVec3("color"); }
 
   /**
-   * @brief Get the @ref gfx::LightPositionModel to use when placing the
-   * light - whether the lights translation should be relative to the camera,
-   * the global scene origin, or some object.
+   * @brief Get/Set the color scale of the light.
    */
-  gfx::LightPositionModel getPositionModel() const {
-    const std::string val =
-        Cr::Utility::String::lowercase(get<std::string>("position_model"));
-    auto mapIter = LightPositionNamesMap.find(val);
-    if (mapIter != LightPositionNamesMap.end()) {
-      return mapIter->second;
-    }
-    // global is default value - should never be returned since setter verifies
-    // value
-    return gfx::LightPositionModel::Global;
-  }
+  void setIntensity(double intensity) { setDouble("intensity", intensity); }
+  double getIntensity() const { return getDouble("intensity"); }
 
   /**
-   * @brief Gets a smart pointer reference to a copy of the spotlight
-   * configuration data for this @ref LightInstanceAttributes.
+   * @brief Get/Set the type of the light
    */
-  std::shared_ptr<Configuration> getSpotlightConfiguration() const {
-    return getSubconfigCopy<Configuration>("spot");
-  }
+  void setType(const std::string& type) { setString("type", type); }
+  std::string getType() const { return getString("type"); }
 
   /**
-   * @brief Gets a smart pointer reference to the actual spotlight
-   * configuration data for this @ref LightInstanceAttributes.
-   */
-  std::shared_ptr<Configuration> editSpotlightConfiguration() {
-    return editSubconfig<Configuration>("spot");
-  }
-
-  /**
-   * @brief Set inner cone angle for spotlights. This value resides in subconfig
-   * 'spot'.  Should be ignored for other lights
+   * @brief Get/Set inner cone angle for spotlights.  Should be ignored for
+   * other lights
    */
   void setInnerConeAngle(Magnum::Rad innerConeAngle) {
-    editSubconfig<Configuration>("spot")->set("innerConeAngle", innerConeAngle);
+    setRad("innerConeAngle", innerConeAngle);
   }
+  Magnum::Rad getInnerConeAngle() const { return getRad("innerConeAngle"); }
 
   /**
-   * @brief Get inner cone angle for spotlights.  This value resides in
-   * subconfig 'spot'.  Should be ignored for other lights
-   */
-  Magnum::Rad getInnerConeAngle() const {
-    const auto spotCfg = getSubconfigCopy<Configuration>("spot");
-    return spotCfg->get<Magnum::Rad>("innerConeAngle");
-  }
-
-  /**
-   * @brief Set outer cone angle for spotlights. This value resides in subconfig
-   * 'spot'.  Should be ignored for other lights
+   * @brief Get/Set inner cone angle for spotlights. Should be ignored for other
+   * lights
    */
   void setOuterConeAngle(Magnum::Rad outerConeAngle) {
-    editSubconfig<Configuration>("spot")->set("outerConeAngle", outerConeAngle);
+    setRad("outerConeAngle", outerConeAngle);
   }
-
-  /**
-   * @brief Get outer cone angle for spotlights. This value resides in subconfig
-   * 'spot'.  Should be ignored for other lights
-   */
-  Magnum::Rad getOuterConeAngle() const {
-    const auto spotCfg = getSubconfigCopy<Configuration>("spot");
-    return spotCfg->get<Magnum::Rad>("outerConeAngle");
-  }
-
-  /**
-   * @brief Populate a json object with all the first-level values held in this
-   * configuration.  Default is overridden to handle special cases for
-   * LightInstanceAttributes.
-   */
-
-  void writeValuesToJson(io::JsonGenericValue& jsonObj,
-                         io::JsonAllocator& allocator) const override;
-
- protected:
-  /**
-   * @brief Retrieve a comma-separated string holding the header values for the
-   * info returned for this managed object, type-specific.
-   */
-
-  std::string getObjectInfoHeaderInternal() const override {
-    return "Position XYZ,Direction XYZ,Color RGB,Intensity,Light Type,"
-           "Light Position Model,";
-  }
-
-  /**
-   * @brief Retrieve a comma-separated informational string about the
-   * contents of this managed object.
-   * TODO : once Magnum supports retrieving key-values of configurations,
-   * use that to build this data.
-   */
-  std::string getObjectInfoInternal() const override {
-    return Cr::Utility::formatString(
-        "{},{},{},{},{},{},", getAsString("position"), getAsString("direction"),
-        getAsString("color"), getAsString("intensity"),
-        getLightTypeName(getType()),
-        getLightPositionModelName(getPositionModel()));
-  }
+  Magnum::Rad getOuterConeAngle() const { return getRad("outerConeAngle"); }
 
  public:
   ESP_SMART_POINTERS(LightInstanceAttributes)
@@ -209,121 +83,56 @@ class LightInstanceAttributes : public AbstractAttributes {
  */
 class LightLayoutAttributes : public AbstractAttributes {
  public:
-  explicit LightLayoutAttributes(const std::string& handle = "");
-
-  LightLayoutAttributes(const LightLayoutAttributes& otr);
-  LightLayoutAttributes(LightLayoutAttributes&& otr) noexcept;
-
-  LightLayoutAttributes& operator=(const LightLayoutAttributes& otr);
-  LightLayoutAttributes& operator=(LightLayoutAttributes&& otr) noexcept;
+  LightLayoutAttributes(const std::string& handle = "");
 
   /**
-   * @brief Set a scale of all positive intensities by specified amount.
-   * This is to make simple, sweeping adjustments to scene lighting in habitat.
-   */
-  void setPositiveIntensityScale(double positive_intensity_scale) {
-    set("positive_intensity_scale", positive_intensity_scale);
-  }
-  /**
-   * @brief Get a scale of all positive intensities by specified amount.
-   * This is to make simple, sweeping adjustments to scene lighting in habitat.
-   */
-  double getPositiveIntensityScale() const {
-    return get<double>("positive_intensity_scale");
-  }
-
-  /**
-   * @brief Set a scale of all negative intensities by specified amount.
-   * This is to make simple, sweeping adjustments to scene lighting in habitat.
-   */
-  void setNegativeIntensityScale(double negative_intensity_scale) {
-    set("negative_intensity_scale", negative_intensity_scale);
-  }
-  /**
-   * @brief Get a scale of all negative intensities by specified amount.
-   * This is to make simple, sweeping adjustments to scene lighting in habitat.
-   */
-  double getNegativeIntensityScale() const {
-    return get<double>("negative_intensity_scale");
-  }
-
-  /**
-   * @brief Add a @ref LightInstanceAttributes to this lighting layout
+   * @brief Add a light instance to this lighting layout
    */
   void addLightInstance(LightInstanceAttributes::ptr _lightInstance) {
-    this->setSubAttributesInternal<LightInstanceAttributes>(
-        _lightInstance, availableLightIDs_, lightInstConfig_, "", false);
+    lightInstances_.emplace(_lightInstance->getHandle(), _lightInstance);
   }
 
   /**
-   * @brief Remove a named @ref LightInstanceAttributes from this lighting layout
+   * @brief Remove a light from this lighting layout
    */
   LightInstanceAttributes::ptr removeLightInstance(const std::string& handle) {
-    return this->removeNamedSubAttributesInternal<LightInstanceAttributes>(
-        handle, availableLightIDs_, lightInstConfig_);
+    auto inst = getLightInstance(handle);
+    if (nullptr != inst) {
+      lightInstances_.erase(handle);
+    }
+    return inst;
+  }
+
+  LightInstanceAttributes::ptr getLightInstance(const std::string& handle) {
+    if (lightInstances_.count(handle) == 0) {
+      return nullptr;
+    }
+    auto inst = lightInstances_.at(handle);
+    return inst;
   }
 
   /**
-   * @brief Retrieve a reference to the named @ref LightInstanceAttributes
+   * @brief Get the lighting instances for this layout
    */
-  LightInstanceAttributes::cptr getLightInstance(const std::string& handle) {
-    return getNamedSubAttributesInternal<LightInstanceAttributes>(
-        handle, lightInstConfig_);
+  const std::map<std::string, LightInstanceAttributes::ptr> getLightInstances()
+      const {
+    return lightInstances_;
   }
 
   /**
-   * @brief Get all the @ref LightInstanceAttributes for this layout
+   * @brief Return how many lights are in this light layout
    */
-  std::vector<LightInstanceAttributes::cptr> getLightInstances() const {
-    return this->getSubAttributesListInternal<LightInstanceAttributes>(
-        lightInstConfig_);
-  }
-
-  /**
-   * @brief Return how many lights are in this light layout - number of
-   * @ref LightInstanceAttributes in @ref lightInstConfig_ subconfig.
-   */
-  int getNumLightInstances() const {
-    return this->getNumSubAttributesInternal("", lightInstConfig_);
-  }
-
-  /**
-   * @brief Populate a json object with all the first-level values held in this
-   * configuration.  Default is overridden to handle special cases for
-   * LightLayoutAttributes.
-   */
-  void writeValuesToJson(io::JsonGenericValue& jsonObj,
-                         io::JsonAllocator& allocator) const override;
+  int getNumLightInstances() { return lightInstances_.size(); }
 
  protected:
   /**
-   * @brief Retrieve a comma-separated string holding the header values for the
-   * info returned for this managed object, type-specific. The individual light
-   * instances return a header for this.
+   * @brief The light instances used by this lighting layout
    */
-  std::string getObjectInfoHeaderInternal() const override { return ","; };
-
-  /**
-   * @brief Retrieve a comma-separated informational string about the contents
-   * of this managed object.
-   */
-  std::string getObjectInfoInternal() const override;
-
-  /**
-   * @brief Smartpointer to created @ref LightInstanceAttributes configuration. The
-   * configuration is created on LightLayoutAttributes construction.
-   */
-  std::shared_ptr<Configuration> lightInstConfig_{};
-
-  /**
-   * @brief Deque holding all released IDs to consume for @ref LightInstanceAttributes when
-   * one is deleted, before using size of lightInstances_ container.
-   */
-  std::deque<int> availableLightIDs_;
+  std::map<std::string, LightInstanceAttributes::ptr> lightInstances_;
 
  public:
   ESP_SMART_POINTERS(LightLayoutAttributes)
-};  // class LightLayoutAttribute
+};  // namespace attributes
 }  // namespace attributes
 }  // namespace metadata
 }  // namespace esp

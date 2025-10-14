@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -41,7 +41,7 @@ inline JsonGenericValue toJsonArrayHelper(const T* objects,
                                           int count,
                                           JsonAllocator& allocator) {
   JsonGenericValue arr(rapidjson::kArrayType);
-  for (int i = 0; i < count; ++i) {
+  for (int i = 0; i < count; i++) {
     arr.PushBack(toJsonValue(objects[i], allocator), allocator);
   }
   return arr;
@@ -57,15 +57,12 @@ void addMember(rapidjson::Value& value,
 
 template <typename T>
 bool readMember(const rapidjson::Value& value, const char* tag, T& x) {
-  JsonGenericValue::ConstMemberIterator jsonIter = value.FindMember(tag);
-
-  if (jsonIter == value.MemberEnd()) {
+  if (!value.HasMember(tag)) {
     // return false but don't log an error
     return false;
   }
-
-  if (!fromJsonValue(jsonIter->value, x)) {
-    ESP_ERROR() << "Failed to parse JSON tag \"" << tag << "\"";
+  if (!fromJsonValue(value[tag], x)) {
+    LOG(ERROR) << "Failed to parse JSON tag \"" << tag << "\"";
     return false;
   }
   return true;

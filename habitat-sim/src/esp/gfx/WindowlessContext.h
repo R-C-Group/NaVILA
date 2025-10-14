@@ -1,11 +1,11 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_GFX_WINDOWLESSCONTEXT_H_
 #define ESP_GFX_WINDOWLESSCONTEXT_H_
 
-#include "esp/core/Esp.h"
+#include "esp/core/esp.h"
 
 namespace esp {
 namespace gfx {
@@ -14,13 +14,9 @@ class WindowlessContext {
  public:
   explicit WindowlessContext(int gpuDevice = 0);
 
-  ~WindowlessContext() { ESP_DEBUG() << "Deconstructing WindowlessContext"; }
+  ~WindowlessContext() { LOG(INFO) << "Deconstructing WindowlessContext"; }
 
   void makeCurrent();
-  void makeCurrentPlatform();
-
-  void release();
-  void releasePlatform();
 
   int gpuDevice() const;
 

@@ -1,126 +1,142 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "CameraSensor.h"
-#include <Corrade/Utility/Assert.h>
 #include <Magnum/ImageView.h>
 #include <Magnum/Math/Algorithms/GramSchmidt.h>
 #include <Magnum/PixelFormat.h>
-#include <cmath>
 
 #include "CameraSensor.h"
-#include "esp/gfx_batch/DepthUnprojection.h"
+#include "esp/gfx/DepthUnprojection.h"
+#include "esp/gfx/Renderer.h"
 #include "esp/sim/Simulator.h"
 
 namespace esp {
 namespace sensor {
 
-CameraSensorSpec::CameraSensorSpec() : VisualSensorSpec() {
-  uuid = "rgba_camera";
-  sensorSubType = SensorSubType::Pinhole;
-}
-
-void CameraSensorSpec::sanityCheck() const {
-  VisualSensorSpec::sanityCheck();
-  CORRADE_ASSERT(sensorSubType == SensorSubType::Pinhole ||
-                     sensorSubType == SensorSubType::Orthographic,
-                 "CameraSensorSpec::sanityCheck(): sensorSpec does not have "
-                 "SensorSubType "
-                 "Pinhole or Orthographic", );
-  CORRADE_ASSERT(
-      orthoScale > 0.0f,
-      "CameraSensorSpec::sanityCheck(): orthoScale must be greater than 0", );
-}
-
-bool CameraSensorSpec::operator==(const CameraSensorSpec& a) const {
-  return VisualSensorSpec::operator==(a) && a.orthoScale == orthoScale &&
-         a.hfov == hfov;
-}
-
-namespace {
-
-/* Needs to be an internal utility because CameraSensor uses everything except
-   hFoV from the CameraSensorSpec */
-Mn::Matrix4 projectionMatrixInternal(const CameraSensorSpec& spec,
-                                     Mn::Rad hfov) {
-  const Mn::Vector2 nearPlaneSize{1.0f,
-                                  Mn::Vector2{spec.resolution}.aspectRatio()};
-  if (spec.sensorSubType == SensorSubType::Orthographic) {
-    return Mn::Matrix4::orthographicProjection(nearPlaneSize / spec.orthoScale,
-                                               spec.near, spec.far);
-  } else if (spec.sensorSubType == SensorSubType::Pinhole) {
-    const float scale = 1.0f / (2.0f * spec.near * Mn::Math::tan(0.5f * hfov));
-    return Mn::Matrix4::perspectiveProjection(nearPlaneSize / scale, spec.near,
-                                              spec.far);
-  } else
-    CORRADE_ASSERT_UNREACHABLE(
-        "CameraSensorSpec::projectionMatrix(): sensorSpec does not have "
-        "SensorSubType Pinhole or Orthographic",
-        {});
-}
-
-}  // namespace
-
-Mn::Matrix4 CameraSensorSpec::projectionMatrix() const {
-  return projectionMatrixInternal(*this, hfov);
-}
-
 CameraSensor::CameraSensor(scene::SceneNode& cameraNode,
-                           const CameraSensorSpec::ptr& spec)
+                           const SensorSpec::ptr& spec)
     : VisualSensor(cameraNode, spec),
       baseProjMatrix_(Magnum::Math::IdentityInit),
-      zoomMatrix_(Magnum::Math::IdentityInit),
-      renderCamera_(new gfx::RenderCamera(cameraNode,
-                                          visualSensorSpec_->semanticTarget)) {
-  // Sanity check
-  CORRADE_ASSERT(
-      cameraSensorSpec_,
-      "CameraSensor::CameraSensor(): The input sensorSpec is illegal", );
-  cameraSensorSpec_->sanityCheck();
-
-  // RenderCamera initialized in member list
-  setProjectionParameters(*spec);
-  renderCamera_->setAspectRatioPolicy(
-      Mn::SceneGraph::AspectRatioPolicy::Extend);
-  recomputeProjectionMatrix();
-  renderCamera_->setViewport(this->framebufferSize());
-  // Set initial hFOV
-  setFOV(cameraSensorSpec_->hfov);
+      zoomMatrix_(Magnum::Math::IdentityInit) {
+  setProjectionParameters(spec);
 }  // ctor
 
-void CameraSensor::setProjectionParameters(const CameraSensorSpec& spec) {
+void CameraSensor::setProjectionParameters(const SensorSpec::ptr& spec) {
+  ASSERT(spec != nullptr);
   // update this sensor's sensor spec to reflect the passed new values
-  cameraSensorSpec_->resolution = spec.resolution;
-  setCameraType(spec.sensorSubType);
+  spec_->resolution = spec->resolution;
+  for (const auto& elem : spec->parameters) {
+    spec_->parameters.at(elem.first) = elem.second;
+  }
+
+  width_ = spec_->resolution[1];
+  height_ = spec_->resolution[0];
+  near_ = std::atof(spec_->parameters.at("near").c_str());
+  far_ = std::atof(spec_->parameters.at("far").c_str());
+  setCameraType(spec->sensorSubType);
 
 }  // setProjectionParameters
 
-void CameraSensor::recomputeProjectionMatrix() {
-  projectionMatrix_ = zoomMatrix_ * baseProjMatrix_;
-  // update renderCamera_'s projectionMatrix every time the sensor's
-  // projectionMatrix changes
-  renderCamera_->setProjectionMatrix(cameraSensorSpec_->resolution[1],
-                                     cameraSensorSpec_->resolution[0],
-                                     projectionMatrix_);
-}
-
 void CameraSensor::recomputeBaseProjectionMatrix() {
   // refresh size after relevant parameters have changed
-  baseProjMatrix_ = projectionMatrixInternal(*cameraSensorSpec_, hfov_);
+  Mn::Vector2 nearPlaneSize_ =
+      Mn::Vector2{1.0f, static_cast<float>(height_) / width_};
+  float scale;
+  if (spec_->sensorSubType == SensorSubType::Orthographic) {
+    scale = std::atof(spec_->parameters.at("ortho_scale").c_str());
+    nearPlaneSize_ /= scale;
+    baseProjMatrix_ =
+        Mn::Matrix4::orthographicProjection(nearPlaneSize_, near_, far_);
+  } else {
+    if (spec_->sensorSubType != SensorSubType::Pinhole) {
+      LOG(INFO) << "CameraSensor::setCameraType : Unsupported Camera type val :"
+                << static_cast<int>(spec_->sensorSubType)
+                << " so defaulting to Pinhole.";
+      spec_->sensorSubType = SensorSubType::Pinhole;
+    }
+    float fov = std::atof(spec_->parameters.at("hfov").c_str());
+    Magnum::Deg halfHFovRad{Magnum::Deg(.5 * fov)};
+    scale = 1.0f / (2.0f * near_ * Magnum::Math::tan(halfHFovRad));
+    nearPlaneSize_ /= scale;
+    baseProjMatrix_ =
+        Mn::Matrix4::perspectiveProjection(nearPlaneSize_, near_, far_);
+  }
   // build projection matrix
   recomputeProjectionMatrix();
 }  // CameraSensor::recomputeNearPlaneSize
 
-gfx::RenderCamera* CameraSensor::getRenderCamera() const {
-  return renderCamera_;
+CameraSensor& CameraSensor::setProjectionMatrix(
+    gfx::RenderCamera& targetCamera) {
+  targetCamera.setProjectionMatrix(width_, height_, projectionMatrix_);
+  return *this;
 }
 
-void CameraSensor::draw(scene::SceneGraph& sceneGraph,
-                        gfx::RenderCamera::Flags flags) {
-  gfx::DrawableGroup& defaultRenderingGroup = sceneGraph.getDrawables();
-  defaultRenderingGroup.prepareForDraw(*renderCamera_);
-  renderCamera_->draw(defaultRenderingGroup, flags);
+CameraSensor& CameraSensor::setTransformationMatrix(
+    gfx::RenderCamera& targetCamera) {
+  CORRADE_ASSERT(!scene::SceneGraph::isRootNode(targetCamera.node()),
+                 "CameraSensor::setTransformationMatrix: target camera cannot "
+                 "be on the root node of the scene graph",
+                 *this);
+  Magnum::Matrix4 absTransform = this->node().absoluteTransformation();
+  Magnum::Matrix3 rotation = absTransform.rotationScaling();
+  Magnum::Math::Algorithms::gramSchmidtOrthonormalizeInPlace(rotation);
+
+  VLOG(2) << "||R - GS(R)|| = "
+          << Eigen::Map<mat3f>((rotation - absTransform.rotationShear()).data())
+                 .norm();
+
+  auto relativeTransform =
+      Magnum::Matrix4::from(rotation, absTransform.translation()) *
+      Magnum::Matrix4::scaling(absTransform.scaling());
+
+  // set the transformation to the camera
+  // so that the camera has the correct modelview matrix for rendering;
+  // to do it,
+  // obtain the *absolute* transformation from the sensor node,
+  // apply it as the *relative* transformation between the camera and
+  // its parent
+  auto camParent = targetCamera.node().parent();
+  // if camera's parent is the root node, skip it!
+  if (!scene::SceneGraph::isRootNode(
+          *static_cast<scene::SceneNode*>(camParent))) {
+    relativeTransform =
+        camParent->absoluteTransformation().inverted() * relativeTransform;
+  }
+  targetCamera.node().setTransformation(relativeTransform);
+  return *this;
+}
+
+CameraSensor& CameraSensor::setViewport(gfx::RenderCamera& targetCamera) {
+  targetCamera.setViewport(this->framebufferSize());
+  return *this;
+}
+
+bool CameraSensor::getObservationSpace(ObservationSpace& space) {
+  space.spaceType = ObservationSpaceType::Tensor;
+  space.shape = {static_cast<size_t>(spec_->resolution[0]),
+                 static_cast<size_t>(spec_->resolution[1]),
+                 static_cast<size_t>(spec_->channels)};
+  space.dataType = core::DataType::DT_UINT8;
+  if (spec_->sensorType == SensorType::Semantic) {
+    space.dataType = core::DataType::DT_UINT32;
+  } else if (spec_->sensorType == SensorType::Depth) {
+    space.dataType = core::DataType::DT_FLOAT;
+  }
+  return true;
+}
+
+bool CameraSensor::getObservation(sim::Simulator& sim, Observation& obs) {
+  // TODO: check if sensor is valid?
+  // TODO: have different classes for the different types of sensors
+  //
+  if (!hasRenderTarget())
+    return false;
+
+  drawObservation(sim);
+  readObservation(obs);
+
+  return true;
 }
 
 bool CameraSensor::drawObservation(sim::Simulator& sim) {
@@ -131,48 +147,61 @@ bool CameraSensor::drawObservation(sim::Simulator& sim) {
   renderTarget().renderEnter();
 
   gfx::RenderCamera::Flags flags;
-  if (sim.isFrustumCullingEnabled()) {
+  if (sim.isFrustumCullingEnabled())
     flags |= gfx::RenderCamera::Flag::FrustumCulling;
-  }
 
-  if (cameraSensorSpec_->sensorType == SensorType::Semantic) {
+  gfx::Renderer::ptr renderer = sim.getRenderer();
+  if (spec_->sensorType == SensorType::Semantic) {
     // TODO: check sim has semantic scene graph
-    bool twoSceneGraphs =
-        (&sim.getActiveSemanticSceneGraph() != &sim.getActiveSceneGraph());
-
-    if (twoSceneGraphs) {
-      // Helper's constructor moves this camera to the semantic scene graph.
-      // When helper goes out of scope, its destructor moves it back to main
-      // scene graph.
-      VisualSensor::MoveSemanticSensorNodeHelper helper(*this, sim);
-      draw(sim.getActiveSemanticSceneGraph(), flags);
-    } else {
-      draw(sim.getActiveSemanticSceneGraph(), flags);
-    }
-
-    if (twoSceneGraphs) {
+    renderer->draw(*this, sim.getActiveSemanticSceneGraph(), flags);
+    if (&sim.getActiveSemanticSceneGraph() != &sim.getActiveSceneGraph()) {
       flags |= gfx::RenderCamera::Flag::ObjectsOnly;
-      draw(sim.getActiveSceneGraph(), flags);
+      renderer->draw(*this, sim.getActiveSceneGraph(), flags);
     }
   } else {
-    // SensorType is Color, Depth or any other type
-    draw(sim.getActiveSceneGraph(), flags);
-
-    if (cameraSensorSpec_->sensorType == SensorType::Color) {
-      // include HBAO in Color sensors (only if enabled for render target)
-      renderTarget().tryDrawHbao();
-
-      // include DebugLineRender in Color sensors
-      const auto debugLineRender = sim.getDebugLineRender();
-      if (debugLineRender) {
-        debugLineRender->flushLines(renderCamera_->cameraMatrix(),
-                                    renderCamera_->projectionMatrix(),
-                                    renderCamera_->viewport());
-      }
-    }
+    // SensorType is Depth or any other type
+    renderer->draw(*this, sim.getActiveSceneGraph(), flags);
   }
 
   renderTarget().renderExit();
+
+  return true;
+}
+
+void CameraSensor::readObservation(Observation& obs) {
+  // Make sure we have memory
+  if (buffer_ == nullptr) {
+    // TODO: check if our sensor was resized and resize our buffer if needed
+    ObservationSpace space;
+    getObservationSpace(space);
+    buffer_ = core::Buffer::create(space.shape, space.dataType);
+  }
+  obs.buffer = buffer_;
+
+  // TODO: have different classes for the different types of sensors
+  // TODO: do we need to flip axis?
+  if (spec_->sensorType == SensorType::Semantic) {
+    renderTarget().readFrameObjectId(Magnum::MutableImageView2D{
+        Magnum::PixelFormat::R32UI, renderTarget().framebufferSize(),
+        obs.buffer->data});
+  } else if (spec_->sensorType == SensorType::Depth) {
+    renderTarget().readFrameDepth(Magnum::MutableImageView2D{
+        Magnum::PixelFormat::R32F, renderTarget().framebufferSize(),
+        obs.buffer->data});
+  } else {
+    renderTarget().readFrameRgba(Magnum::MutableImageView2D{
+        Magnum::PixelFormat::RGBA8Unorm, renderTarget().framebufferSize(),
+        obs.buffer->data});
+  }
+}
+
+bool CameraSensor::displayObservation(sim::Simulator& sim) {
+  if (!hasRenderTarget()) {
+    return false;
+  }
+
+  drawObservation(sim);
+  renderTarget().blitRgbaToDefault();
 
   return true;
 }
@@ -181,7 +210,7 @@ Corrade::Containers::Optional<Magnum::Vector2> CameraSensor::depthUnprojection()
     const {
   // projectionMatrix_ is managed by implementation class and is set whenever
   // quantities change.
-  return {gfx_batch::calculateDepthUnprojection(projectionMatrix_)};
+  return {gfx::calculateDepthUnprojection(projectionMatrix_)};
 }  // CameraSensor::depthUnprojection
 
 }  // namespace sensor

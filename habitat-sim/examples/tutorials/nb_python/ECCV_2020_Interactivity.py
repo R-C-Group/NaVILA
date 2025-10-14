@@ -1,33 +1,29 @@
 # ---
 # jupyter:
 #   accelerator: GPU
+#   colab:
+#     collapsed_sections: []
+#     name: 'ECCV 2020: Habitat-sim Interactivity'
+#     provenance: []
 #   jupytext:
 #     cell_metadata_filter: -all
-#     formats: nb_python//py:percent,notebooks//ipynb
+#     formats: nb_python//py:percent,colabs//ipynb
 #     notebook_metadata_filter: all
 #     text_representation:
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.7
+#       jupytext_version: 1.6.0
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
-#     language: python
+#     display_name: Python 3
 #     name: python3
-#   language_info:
-#     codemirror_mode:
-#       name: ipython
-#       version: 3
-#     file_extension: .py
-#     mimetype: text/x-python
-#     name: python
-#     nbconvert_exporter: python
-#     pygments_lexer: ipython3
-#     version: 3.9.17
 # ---
 
 # %% [markdown]
-# # Habitat-sim Interactivity
+# <a href="https://colab.research.google.com/github/facebookresearch/habitat-sim/blob/master/examples/tutorials/colabs/ECCV_2020_Interactivity.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+
+# %% [markdown]
+# #Habitat-sim Interactivity
 #
 # This use-case driven tutorial covers Habitat-sim interactivity, including:
 # - Adding new objects to a scene
@@ -38,13 +34,22 @@
 # - Agent embodiment and continuous control
 
 # %%
+# @title Installation { display-mode: "form" }
+# @markdown (double click to show code).
+
+# !curl -L https://raw.githubusercontent.com/facebookresearch/habitat-sim/master/examples/colab_utils/colab_install.sh | NIGHTLY=true bash -s
+# !wget -c http://dl.fbaipublicfiles.com/habitat/mp3d_example.zip && unzip -o mp3d_example.zip -d /content/habitat-sim/data/scene_datasets/mp3d/
+
+# %%
 # @title Path Setup and Imports { display-mode: "form" }
 # @markdown (double click to show code).
 
+# %cd /content/habitat-sim
 ## [setup]
 import math
 import os
 import random
+import sys
 
 import git
 import magnum as mn
@@ -68,12 +73,18 @@ try:
 except ImportError:
     HAS_WIDGETS = False
 
+
+if "google.colab" in sys.modules:
+    os.environ["IMAGEIO_FFMPEG_EXE"] = "/usr/bin/ffmpeg"
+
 repo = git.Repo(".", search_parent_directories=True)
 dir_path = repo.working_tree_dir
+# %cd $dir_path
 data_path = os.path.join(dir_path, "data")
 output_directory = "examples/tutorials/interactivity_output/"  # @param {type:"string"}
 output_path = os.path.join(dir_path, output_directory)
-os.makedirs(output_path, exist_ok=True)
+if not os.path.exists(output_path):
+    os.mkdir(output_path)
 
 # define some globals the first time we run.
 if "sim" not in globals():
@@ -85,8 +96,6 @@ if "sim" not in globals():
     obj_attr_mgr = None
     global stage_attr_mgr
     stage_attr_mgr = None
-    global rigid_obj_mgr
-    rigid_obj_mgr = None
 
 
 # %%
@@ -104,87 +113,52 @@ def make_cfg(settings):
     sim_cfg.gpu_device_id = 0
     sim_cfg.scene_id = settings["scene"]
     sim_cfg.enable_physics = settings["enable_physics"]
-    # Optional; Specify the location of an existing scene dataset configuration
-    # that describes the locations and configurations of all the assets to be used
-    if "scene_dataset_config" in settings:
-        sim_cfg.scene_dataset_config_file = settings["scene_dataset_config"]
 
     # Note: all sensors must have the same resolution
+    sensors = {
+        "color_sensor_1st_person": {
+            "sensor_type": habitat_sim.SensorType.COLOR,
+            "resolution": [settings["height"], settings["width"]],
+            "position": [0.0, settings["sensor_height"], 0.0],
+            "orientation": [settings["sensor_pitch"], 0.0, 0.0],
+        },
+        "depth_sensor_1st_person": {
+            "sensor_type": habitat_sim.SensorType.DEPTH,
+            "resolution": [settings["height"], settings["width"]],
+            "position": [0.0, settings["sensor_height"], 0.0],
+            "orientation": [settings["sensor_pitch"], 0.0, 0.0],
+        },
+        "semantic_sensor_1st_person": {
+            "sensor_type": habitat_sim.SensorType.SEMANTIC,
+            "resolution": [settings["height"], settings["width"]],
+            "position": [0.0, settings["sensor_height"], 0.0],
+            "orientation": [settings["sensor_pitch"], 0.0, 0.0],
+        },
+        # configure the 3rd person cam specifically:
+        "color_sensor_3rd_person": {
+            "sensor_type": habitat_sim.SensorType.COLOR,
+            "resolution": [settings["height"], settings["width"]],
+            "position": [0.0, settings["sensor_height"] + 0.2, 0.2],
+            "orientation": np.array([-math.pi / 4, 0, 0]),
+        },
+    }
+
     sensor_specs = []
-    if settings["color_sensor_1st_person"]:
-        color_sensor_1st_person_spec = habitat_sim.CameraSensorSpec()
-        color_sensor_1st_person_spec.uuid = "color_sensor_1st_person"
-        color_sensor_1st_person_spec.sensor_type = habitat_sim.SensorType.COLOR
-        color_sensor_1st_person_spec.resolution = [
-            settings["height"],
-            settings["width"],
-        ]
-        color_sensor_1st_person_spec.position = [0.0, settings["sensor_height"], 0.0]
-        color_sensor_1st_person_spec.orientation = [
-            settings["sensor_pitch"],
-            0.0,
-            0.0,
-        ]
-        color_sensor_1st_person_spec.sensor_subtype = habitat_sim.SensorSubType.PINHOLE
-        sensor_specs.append(color_sensor_1st_person_spec)
-    if settings["depth_sensor_1st_person"]:
-        depth_sensor_1st_person_spec = habitat_sim.CameraSensorSpec()
-        depth_sensor_1st_person_spec.uuid = "depth_sensor_1st_person"
-        depth_sensor_1st_person_spec.sensor_type = habitat_sim.SensorType.DEPTH
-        depth_sensor_1st_person_spec.resolution = [
-            settings["height"],
-            settings["width"],
-        ]
-        depth_sensor_1st_person_spec.position = [0.0, settings["sensor_height"], 0.0]
-        depth_sensor_1st_person_spec.orientation = [
-            settings["sensor_pitch"],
-            0.0,
-            0.0,
-        ]
-        depth_sensor_1st_person_spec.sensor_subtype = habitat_sim.SensorSubType.PINHOLE
-        sensor_specs.append(depth_sensor_1st_person_spec)
-    if settings["semantic_sensor_1st_person"]:
-        semantic_sensor_1st_person_spec = habitat_sim.CameraSensorSpec()
-        semantic_sensor_1st_person_spec.uuid = "semantic_sensor_1st_person"
-        semantic_sensor_1st_person_spec.sensor_type = habitat_sim.SensorType.SEMANTIC
-        semantic_sensor_1st_person_spec.resolution = [
-            settings["height"],
-            settings["width"],
-        ]
-        semantic_sensor_1st_person_spec.position = [
-            0.0,
-            settings["sensor_height"],
-            0.0,
-        ]
-        semantic_sensor_1st_person_spec.orientation = [
-            settings["sensor_pitch"],
-            0.0,
-            0.0,
-        ]
-        semantic_sensor_1st_person_spec.sensor_subtype = (
-            habitat_sim.SensorSubType.PINHOLE
-        )
-        sensor_specs.append(semantic_sensor_1st_person_spec)
-    if settings["color_sensor_3rd_person"]:
-        color_sensor_3rd_person_spec = habitat_sim.CameraSensorSpec()
-        color_sensor_3rd_person_spec.uuid = "color_sensor_3rd_person"
-        color_sensor_3rd_person_spec.sensor_type = habitat_sim.SensorType.COLOR
-        color_sensor_3rd_person_spec.resolution = [
-            settings["height"],
-            settings["width"],
-        ]
-        color_sensor_3rd_person_spec.position = [
-            0.0,
-            settings["sensor_height"] + 0.2,
-            0.2,
-        ]
-        color_sensor_3rd_person_spec.orientation = [-math.pi / 4, 0.0, 0.0]
-        color_sensor_3rd_person_spec.sensor_subtype = habitat_sim.SensorSubType.PINHOLE
-        sensor_specs.append(color_sensor_3rd_person_spec)
+    for sensor_uuid, sensor_params in sensors.items():
+        if settings[sensor_uuid]:
+            sensor_spec = habitat_sim.SensorSpec()
+            sensor_spec.uuid = sensor_uuid
+            sensor_spec.sensor_type = sensor_params["sensor_type"]
+            sensor_spec.resolution = sensor_params["resolution"]
+            sensor_spec.position = sensor_params["position"]
+            sensor_spec.orientation = sensor_params["orientation"]
+
+            sensor_specs.append(sensor_spec)
 
     # Here you can specify the amount of displacement in a forward action and the turn angle
     agent_cfg = habitat_sim.agent.AgentConfiguration()
     agent_cfg.sensor_specifications = sensor_specs
+
     return habitat_sim.Configuration(sim_cfg, [agent_cfg])
 
 
@@ -192,12 +166,7 @@ def make_default_settings():
     settings = {
         "width": 720,  # Spatial resolution of the observations
         "height": 544,
-        "scene": os.path.join(
-            data_path, "scene_datasets/mp3d_example/17DRP5sb8fy/17DRP5sb8fy.glb"
-        ),  # Scene path
-        "scene_dataset_config": os.path.join(
-            data_path, "scene_datasets/mp3d_example/mp3d.scene_dataset_config.json"
-        ),  # MP3D scene dataset
+        "scene": "./data/scene_datasets/mp3d/17DRP5sb8fy/17DRP5sb8fy.glb",  # Scene path
         "default_agent": 0,
         "sensor_height": 1.5,  # Height of sensors in meters
         "sensor_pitch": -math.pi / 8.0,  # sensor pitch (x rotation in rads)
@@ -218,19 +187,15 @@ def make_simulator_from_settings(sim_settings):
     global obj_attr_mgr
     global prim_attr_mgr
     global stage_attr_mgr
-    global rigid_obj_mgr
     if sim != None:
         sim.close()
     # initialize the simulator
     sim = habitat_sim.Simulator(cfg)
     # Managers of various Attributes templates
     obj_attr_mgr = sim.get_object_template_manager()
-    obj_attr_mgr.load_configs(str(os.path.join(data_path, "objects/example_objects")))
-    obj_attr_mgr.load_configs(str(os.path.join(data_path, "objects/locobot_merged")))
+    obj_attr_mgr.load_configs(str(os.path.join(data_path, "objects")))
     prim_attr_mgr = sim.get_asset_template_manager()
     stage_attr_mgr = sim.get_stage_template_manager()
-    # Manager providing access to rigid objects
-    rigid_obj_mgr = sim.get_rigid_object_manager()
 
 
 # %%
@@ -240,6 +205,11 @@ def make_simulator_from_settings(sim_settings):
 # @markdown - remove_all_objects
 # @markdown - simulate
 # @markdown - sample_object_state
+
+
+def remove_all_objects(sim):
+    for obj_id in sim.get_existing_object_ids():
+        sim.remove_object(obj_id)
 
 
 def simulate(sim, dt=1.0, get_frames=True):
@@ -257,22 +227,22 @@ def simulate(sim, dt=1.0, get_frames=True):
 # Set an object transform relative to the agent state
 def set_object_state_from_agent(
     sim,
-    obj,
+    ob_id,
     offset=np.array([0, 2.0, -1.5]),
     orientation=mn.Quaternion(((0, 0, 0), 1)),
 ):
     agent_transform = sim.agents[0].scene_node.transformation_matrix()
     ob_translation = agent_transform.transform_point(offset)
-    obj.translation = ob_translation
-    obj.rotation = orientation
+    sim.set_translation(ob_translation, ob_id)
+    sim.set_rotation(orientation, ob_id)
 
 
 # sample a random valid state for the object from the scene bounding box or navmesh
 def sample_object_state(
-    sim, obj, from_navmesh=True, maintain_object_up=True, max_tries=100, bb=None
+    sim, object_id, from_navmesh=True, maintain_object_up=True, max_tries=100, bb=None
 ):
     # check that the object is not STATIC
-    if obj.motion_type is habitat_sim.physics.MotionType.STATIC:
+    if sim.get_object_motion_type(object_id) is habitat_sim.physics.MotionType.STATIC:
         print("sample_object_state : Object is STATIC, aborting.")
     if from_navmesh:
         if not sim.pathfinder.is_loaded:
@@ -286,7 +256,7 @@ def sample_object_state(
     tries = 0
     valid_placement = False
     # Note: following assumes sim was not reconfigured without close
-    scene_collision_margin = stage_attr_mgr.get_template_by_id(0).margin
+    scene_collision_margin = stage_attr_mgr.get_template_by_ID(0).margin
     while not valid_placement and tries < max_tries:
         tries += 1
         # initialize sample location to random point in scene bounding box
@@ -297,27 +267,33 @@ def sample_object_state(
         else:
             sample_location = np.random.uniform(bb.min, bb.max)
         # set the test state
-        obj.translation = sample_location
+        sim.set_translation(sample_location, object_id)
         if maintain_object_up:
             # random rotation only on the Y axis
             y_rotation = mn.Quaternion.rotation(
                 mn.Rad(random.random() * 2 * math.pi), mn.Vector3(0, 1.0, 0)
             )
-            obj.rotation = y_rotation * obj.rotation
+            sim.set_rotation(y_rotation * sim.get_rotation(object_id), object_id)
         else:
             # unconstrained random rotation
-            obj.rotation = ut.random_quaternion()
+            sim.set_rotation(ut.random_quaternion(), object_id)
 
         # raise object such that lowest bounding box corner is above the navmesh sample point.
         if from_navmesh:
-            xform_bb = habitat_sim.geo.get_transformed_bb(obj.aabb, obj.transformation)
+            obj_node = sim.get_object_scene_node(object_id)
+            xform_bb = habitat_sim.geo.get_transformed_bb(
+                obj_node.cumulative_bb, obj_node.transformation
+            )
             # also account for collision margin of the scene
-            obj.translation += mn.Vector3(
+            y_translation = mn.Vector3(
                 0, xform_bb.size_y() / 2.0 + scene_collision_margin, 0
+            )
+            sim.set_translation(
+                y_translation + sim.get_translation(object_id), object_id
             )
 
         # test for penetration with the environment
-        if not obj.contact_test():
+        if not sim.contact_test(object_id):
             valid_placement = True
 
     if not valid_placement:
@@ -329,7 +305,6 @@ def sample_object_state(
 # @title Define Visualization Utility Function { display-mode: "form" }
 # @markdown (double click to show code)
 # @markdown - display_sample
-
 
 # Change to do something like this maybe: https://stackoverflow.com/a/41432704
 def display_sample(
@@ -386,9 +361,8 @@ else:
 
 
 # %%
-# @title Define GUI Utility Functions { display-mode: "form" }
+# @title Define Colab GUI Utility Functions { display-mode: "form" }
 # @markdown (double click to show code)
-
 
 # Event handler for dropdowns displaying file-based object handles
 def on_file_obj_ddl_change(ddl_values):
@@ -457,7 +431,7 @@ def make_clear_all_objects_button():
         return
 
     def on_clear_click(b):
-        rigid_obj_mgr.remove_all_objects()
+        remove_all_objects(sim)
 
     clear_objs_button = set_button_launcher("Clear all objects")
     clear_objs_button.on_click(on_clear_click)
@@ -486,7 +460,7 @@ def build_widget_ui(obj_attr_mgr, prim_attr_mgr):
     if not HAS_WIDGETS:
         sel_file_obj_handle = file_obj_handles[0]
         sel_prim_obj_handle = prim_obj_handles[0]
-        sel_asset_handle = prim_asset_handles[0]
+        sel_prim_obj_handle = prim_asset_handles[0]
         return
     file_obj_ddl, sel_file_obj_handle = set_handle_ddl_widget(
         file_obj_handles,
@@ -514,13 +488,13 @@ def build_widget_ui(obj_attr_mgr, prim_attr_mgr):
 # %%
 # @title Initialize Simulator and Load Scene { display-mode: "form" }
 
-# convenience functions defined in Utility cell manage global variables
+# convienience functions defined in Utility cell manage global variables
 sim_settings = make_default_settings()
 # set globals: sim,
 make_simulator_from_settings(sim_settings)
 
 # %% [markdown]
-# # Interactivity in Habitat-sim
+# #Interactivity in Habitat-sim
 #
 # This tutorial covers how to configure and use the Habitat-sim object manipulation API to setup and run physical interaction simulations.
 #
@@ -531,7 +505,7 @@ make_simulator_from_settings(sim_settings)
 # 3.   Generating Scene Clutter on the NavMesh
 # 4.   Continuous Embodied Navigation
 #
-# For more tutorial examples and details see the [Interactive Rigid Objects tutorial](https://aihabitat.org/docs/habitat-sim/rigid-object-tutorial.html).
+# For more tutorial examples and details see the [Interactive Rigid Objects tutorial](https://aihabitat.org/docs/habitat-sim/rigid-object-tutorial.html) also available for Colab [here](https://github.com/facebookresearch/habitat-sim/blob/master/examples/tutorials/colabs/rigid_object_tutorial.ipynb).
 #
 #
 #
@@ -540,7 +514,7 @@ make_simulator_from_settings(sim_settings)
 # %% [markdown]
 # ## Introduction to Interactivity
 #
-# #### Easily add an object and simulate!
+# ####Easily add an object and simulate!
 #
 #
 
@@ -560,7 +534,7 @@ build_widget_ui(obj_attr_mgr, prim_attr_mgr)
 
 # @markdown Choose either the primitive or file-based template recently selected in the dropdown:
 obj_template_handle = sel_file_obj_handle
-asset_template_handle = sel_asset_handle
+asset_tempalte_handle = sel_asset_handle
 object_type = "File-based"  # @param ["File-based","Primitive-based"]
 if "File" in object_type:
     # Handle File-based object handle
@@ -591,11 +565,11 @@ rotation_z = mn.Quaternion.rotation(mn.Deg(orientation_z), mn.Vector3(1.0, 0, 0)
 orientation = rotation_z * rotation_y * rotation_x
 
 # Add object instantiated by desired template using template handle
-obj_1 = rigid_obj_mgr.add_object_by_template_handle(obj_template_handle)
+obj_id_1 = sim.add_object_by_handle(obj_template_handle)
 
 # @markdown Note: agent local coordinate system is Y up and -Z forward.
 # Move object to be in front of the agent
-set_object_state_from_agent(sim, obj_1, offset=offset, orientation=orientation)
+set_object_state_from_agent(sim, obj_id_1, offset=offset, orientation=orientation)
 
 # display a still frame of the scene after the object is added if RGB sensor is enabled
 observations = sim.get_sensor_observations()
@@ -629,22 +603,22 @@ build_widget_ui(obj_attr_mgr, prim_attr_mgr)
 # %%
 # @title Scripted vs. Dynamic Motion { display-mode: "form" }
 # @markdown A quick script to generate video data for AI classification of dynamically dropping vs. kinematically moving objects.
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 # @markdown Set the scene as dynamic or kinematic:
 scenario_is_kinematic = True  # @param {type:"boolean"}
 
 # add the selected object
-obj_1 = rigid_obj_mgr.add_object_by_template_handle(sel_file_obj_handle)
+obj_id_1 = sim.add_object_by_handle(sel_file_obj_handle)
 
 # place the object
 set_object_state_from_agent(
-    sim, obj_1, offset=np.array([0, 2.0, -1.0]), orientation=ut.random_quaternion()
+    sim, obj_id_1, offset=np.array([0, 2.0, -1.0]), orientation=ut.random_quaternion()
 )
 
 if scenario_is_kinematic:
     # use the velocity control struct to setup a constant rate kinematic motion
-    obj_1.motion_type = habitat_sim.physics.MotionType.KINEMATIC
-    vel_control = obj_1.velocity_control
+    sim.set_object_motion_type(habitat_sim.physics.MotionType.KINEMATIC, obj_id_1)
+    vel_control = sim.get_object_velocity_control(obj_id_1)
     vel_control.controlling_lin_vel = True
     vel_control.linear_velocity = np.array([0, -1.0, 0])
 
@@ -660,33 +634,34 @@ if make_video:
         open_vid=show_video,
     )
 
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 
 
 # %%
 # @title Object Permanence { display-mode: "form" }
 # @markdown This example script demonstrates a possible object permanence task.
 # @markdown Two objects are dropped behind an occluder. One is removed while occluded.
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 
 # @markdown 1. Add the two dynamic objects.
 # add the selected objects
-obj_1 = rigid_obj_mgr.add_object_by_template_handle(sel_file_obj_handle)
-obj_2 = rigid_obj_mgr.add_object_by_template_handle(sel_file_obj_handle)
+obj_id_1 = sim.add_object_by_handle(sel_file_obj_handle)
+obj_id_2 = sim.add_object_by_handle(sel_file_obj_handle)
 
 # place the objects
 set_object_state_from_agent(
-    sim, obj_1, offset=np.array([0.5, 2.0, -1.0]), orientation=ut.random_quaternion()
+    sim, obj_id_1, offset=np.array([0.5, 2.0, -1.0]), orientation=ut.random_quaternion()
 )
 set_object_state_from_agent(
     sim,
-    obj_2,
+    obj_id_2,
     offset=np.array([-0.5, 2.0, -1.0]),
     orientation=ut.random_quaternion(),
 )
 
 # @markdown 2. Configure and add an occluder from a scaled cube primitive.
 # Get a default cube primitive template
+obj_attr_mgr = sim.get_object_template_manager()
 cube_handle = obj_attr_mgr.get_template_handles("cube")[0]
 cube_template_cpy = obj_attr_mgr.get_template_by_handle(cube_handle)
 # Modify the template's configured scale.
@@ -694,9 +669,9 @@ cube_template_cpy.scale = np.array([0.32, 0.075, 0.01])
 # Register the modified template under a new name.
 obj_attr_mgr.register_template(cube_template_cpy, "occluder_cube")
 # Instance and place the occluder object from the template.
-occluder_obj = rigid_obj_mgr.add_object_by_template_handle("occluder_cube")
-set_object_state_from_agent(sim, occluder_obj, offset=np.array([0.0, 1.4, -0.4]))
-occluder_obj.motion_type = habitat_sim.physics.MotionType.KINEMATIC
+occluder_id = sim.add_object_by_handle("occluder_cube")
+set_object_state_from_agent(sim, occluder_id, offset=np.array([0.0, 1.4, -0.4]))
+sim.set_object_motion_type(habitat_sim.physics.MotionType.KINEMATIC, occluder_id)
 # fmt off
 # @markdown 3. Simulate at 60Hz, removing one object when it's center of mass drops below that of the occluder.
 # fmt on
@@ -706,12 +681,14 @@ print("Simulating " + str(dt) + " world seconds.")
 observations = []
 # simulate at 60Hz to the nearest fixed timestep
 start_time = sim.get_world_time()
-
 while sim.get_world_time() < start_time + dt:
     sim.step_physics(1.0 / 60.0)
-    # remove the object once it passes the occluder center and it still exists/hasn't already been removed
-    if obj_2.is_alive and obj_2.translation[1] <= occluder_obj.translation[1]:
-        rigid_obj_mgr.remove_object_by_id(obj_2.object_id)
+    # remove the object once it passes the occluder center
+    if (
+        obj_id_2 in sim.get_existing_object_ids()
+        and sim.get_translation(obj_id_2)[1] <= sim.get_translation(occluder_id)[1]
+    ):
+        sim.remove_object(obj_id_2)
     observations.append(sim.get_sensor_observations())
 
 example_type = "object permanence"
@@ -723,25 +700,25 @@ if make_video:
         output_path + example_type,
         open_vid=show_video,
     )
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 
 
 # %%
 # @title Physical Plausibility Classification { display-mode: "form" }
-# @markdown This example demonstrates a physical plausibility experiment. A sphere
+# @markdown This example demonstrates a physical plausibility expirement. A sphere
 # @markdown is dropped onto the back of a couch to roll onto the floor. Optionally,
 # @markdown an invisible plane is introduced for the sphere to roll onto producing
 # @markdown non-physical motion.
 
 introduce_surface = True  # @param{type:"boolean"}
 
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 
 # add a rolling object
 obj_attr_mgr = sim.get_object_template_manager()
 sphere_handle = obj_attr_mgr.get_template_handles("uvSphereSolid")[0]
-obj_1 = rigid_obj_mgr.add_object_by_template_handle(sphere_handle)
-set_object_state_from_agent(sim, obj_1, offset=np.array([1.0, 1.6, -1.95]))
+obj_id_1 = sim.add_object_by_handle(sphere_handle)
+set_object_state_from_agent(sim, obj_id_1, offset=np.array([1.0, 1.6, -1.95]))
 
 if introduce_surface:
     # optionally add invisible surface
@@ -755,9 +732,9 @@ if introduce_surface:
     obj_attr_mgr.register_template(cube_template_cpy, "invisible_surface")
 
     # Instance and place the surface object from the template.
-    surface_obj = rigid_obj_mgr.add_object_by_template_handle("invisible_surface")
-    set_object_state_from_agent(sim, surface_obj, offset=np.array([0.4, 0.88, -1.6]))
-    surface_obj.motion_type = habitat_sim.physics.MotionType.STATIC
+    surface_id = sim.add_object_by_handle("invisible_surface")
+    set_object_state_from_agent(sim, surface_id, offset=np.array([0.4, 0.88, -1.6]))
+    sim.set_object_motion_type(habitat_sim.physics.MotionType.STATIC, surface_id)
 
 
 example_type = "physical plausibility"
@@ -770,7 +747,7 @@ if make_video:
         output_path + example_type,
         open_vid=show_video,
     )
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 
 
 # %%
@@ -782,7 +759,8 @@ rigid_obj_mgr.remove_all_objects()
 # @markdown ---
 # @markdown Configure Parameters:
 
-rigid_obj_mgr.remove_all_objects()
+obj_attr_mgr = sim.get_object_template_manager()
+remove_all_objects(sim)
 
 seed = 2  # @param{type:"integer"}
 random.seed(seed)
@@ -803,14 +781,13 @@ target_zone = mn.Range3D.from_center(
 )
 num_targets = 9  # @param{type:"integer"}
 for _target in range(num_targets):
-    obj = rigid_obj_mgr.add_object_by_template_handle(cheezit_handle)
+    obj_id = sim.add_object_by_handle(cheezit_handle)
     # rotate boxes off of their sides
-    obj.rotation = mn.Quaternion.rotation(
-        mn.Rad(-mn.math.pi_half), mn.Vector3(1.0, 0, 0)
-    )
+    rotate = mn.Quaternion.rotation(mn.Rad(-mn.math.pi_half), mn.Vector3(1.0, 0, 0))
+    sim.set_rotation(rotate, obj_id)
     # sample state from the target zone
-    if not sample_object_state(sim, obj, False, True, 100, target_zone):
-        rigid_obj_mgr.remove_object_by_id(obj.object_id)
+    if not sample_object_state(sim, obj_id, False, True, 100, target_zone):
+        sim.remove_object(obj_id)
 
 
 show_target_zone = False  # @param{type:"boolean"}
@@ -823,10 +800,10 @@ if show_target_zone:
     # Register the modified template under a new name.
     obj_attr_mgr.register_template(cube_template_cpy, "target_zone")
     # instance and place the object from the template
-    target_zone_obj = rigid_obj_mgr.add_object_by_template_handle("target_zone")
-    target_zone_obj.translation = target_zone.center()
-    target_zone_obj.motion_type = habitat_sim.physics.MotionType.STATIC
-    # print("target_zone_center = " + str(target_zone_obj.translation))
+    target_zone_id = sim.add_object_by_handle("target_zone")
+    sim.set_translation(target_zone.center(), target_zone_id)
+    sim.set_object_motion_type(habitat_sim.physics.MotionType.STATIC, target_zone_id)
+    # print("target_zone_center = " + str(sim.get_translation(target_zone_id)))
 
 # @markdown ---
 # @markdown ###Ball properties:
@@ -838,20 +815,22 @@ ball_mass = 5.01  # @param {type:"slider", min:0.01, max:50.0, step:0.01}
 sphere_template_cpy.mass = ball_mass
 obj_attr_mgr.register_template(sphere_template_cpy, "ball")
 
-ball_obj = rigid_obj_mgr.add_object_by_template_handle("ball")
-set_object_state_from_agent(sim, ball_obj, offset=np.array([0, 1.4, 0]))
+ball_id = sim.add_object_by_handle("ball")
+set_object_state_from_agent(sim, ball_id, offset=np.array([0, 1.4, 0]))
 
 # @markdown Initial linear velocity (m/sec):
 lin_vel_x = 0  # @param {type:"slider", min:-10, max:10, step:0.1}
 lin_vel_y = 1  # @param {type:"slider", min:-10, max:10, step:0.1}
 lin_vel_z = 5  # @param {type:"slider", min:0, max:10, step:0.1}
-ball_obj.linear_velocity = mn.Vector3(lin_vel_x, lin_vel_y, lin_vel_z)
+initial_linear_velocity = mn.Vector3(lin_vel_x, lin_vel_y, lin_vel_z)
+sim.set_linear_velocity(initial_linear_velocity, ball_id)
 
 # @markdown Initial angular velocity (rad/sec):
 ang_vel_x = 0  # @param {type:"slider", min:-100, max:100, step:0.1}
 ang_vel_y = 0  # @param {type:"slider", min:-100, max:100, step:0.1}
 ang_vel_z = 0  # @param {type:"slider", min:-100, max:100, step:0.1}
-ball_obj.angular_velocity = mn.Vector3(ang_vel_x, ang_vel_y, ang_vel_z)
+initial_angular_velocity = mn.Vector3(ang_vel_x, ang_vel_y, ang_vel_z)
+sim.set_angular_velocity(initial_angular_velocity, ball_id)
 
 example_type = "trajectory prediction"
 observations = simulate(sim, dt=3.0)
@@ -863,12 +842,12 @@ if make_video:
         output_path + example_type,
         open_vid=show_video,
     )
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 
 # %% [markdown]
 # ## Generating Scene Clutter on the NavMesh
 #
-# The NavMesh can be used to place objects on surfaces in the scene. Once objects are placed they can be set to MotionType::STATIC, indicating that they are not moveable (kinematics and dynamics are disabled for STATIC objects). The NavMesh can then be recomputed including STATIC object meshes in the voxelization.
+# The NavMesh can be used to place objects on surfaces in the scene. Once objects are placed they can be set to MotionType::STATIC, indiciating that they are not moveable (kinematics and dynamics are disabled for STATIC objects). The NavMesh can then be recomputed including STATIC object meshes in the voxelization.
 #
 # This example demonstrates using the NavMesh to generate a cluttered scene for navigation. In this script we will:
 #
@@ -881,10 +860,8 @@ rigid_obj_mgr.remove_all_objects()
 # @title Initialize Simulator and Load Scene { display-mode: "form" }
 # @markdown (load the apartment_1 scene for clutter generation in an open space)
 sim_settings = make_default_settings()
-sim_settings["scene"] = os.path.join(
-    data_path, "scene_datasets/habitat-test-scenes/apartment_1.glb"
-)
-sim_settings["sensor_pitch"] = 0.0
+sim_settings["scene"] = "./data/scene_datasets/habitat-test-scenes/apartment_1.glb"
+sim_settings["sensor_pitch"] = 0
 
 make_simulator_from_settings(sim_settings)
 
@@ -920,29 +897,30 @@ obj_attr_mgr.register_template(sel_obj_template_cpy, "scaled_sel_obj")
 
 # add the selected object
 sim.navmesh_visualization = True
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 fails = 0
 for _obj in range(num_objects):
-    obj_1 = rigid_obj_mgr.add_object_by_template_handle("scaled_sel_obj")
+    obj_id_1 = sim.add_object_by_handle("scaled_sel_obj")
 
     # place the object
     placement_success = sample_object_state(
-        sim, obj_1, from_navmesh=True, maintain_object_up=True, max_tries=100
+        sim, obj_id_1, from_navmesh=True, maintain_object_up=True, max_tries=100
     )
     if not placement_success:
         fails += 1
-        rigid_obj_mgr.remove_object_by_id(obj_1.object_id)
+        sim.remove_object(obj_id_1)
     else:
         # set the objects to STATIC so they can be added to the NavMesh
-        obj_1.motion_type = habitat_sim.physics.MotionType.STATIC
+        sim.set_object_motion_type(habitat_sim.physics.MotionType.STATIC, obj_id_1)
 
 print("Placement fails = " + str(fails) + "/" + str(num_objects))
 
 # recompute the NavMesh with STATIC objects
 navmesh_settings = habitat_sim.NavMeshSettings()
 navmesh_settings.set_defaults()
-navmesh_settings.include_static_objects = True
-navmesh_success = sim.recompute_navmesh(sim.pathfinder, navmesh_settings)
+navmesh_success = sim.recompute_navmesh(
+    sim.pathfinder, navmesh_settings, include_static_objects=True
+)
 
 # simulate and collect observations
 example_type = "clutter generation"
@@ -955,15 +933,14 @@ if make_video:
         output_path + example_type,
         open_vid=show_video,
     )
-obj_attr_mgr.remove_template_by_handle("scaled_sel_obj")
-rigid_obj_mgr.remove_all_objects()
+remove_all_objects(sim)
 sim.navmesh_visualization = False
 
 # %% [markdown]
 # ## Embodied Continuous Navigation
 
 # %% [markdown]
-# The following example demonstrates setup and execution of an embodied navigation and interaction scenario. An object and an agent embodied by a rigid locobot mesh are placed randomly on the NavMesh. A path is computed for the agent to reach the object which is executed by a continuous path-following controller. The object is then kinematically gripped by the agent and a second path is computed for the agent to reach a goal location, also executed by a continuous controller. The gripped object is then released and thrown in front of the agent.
+# The following example demonstrates setup and excecution of an embodied navigation and interaction scenario. An object and an agent embodied by a rigid locobot mesh are placed randomly on the NavMesh. A path is computed for the agent to reach the object which is executed by a continuous path-following controller. The object is then kinematically gripped by the agent and a second path is computed for the agent to reach a goal location, also executed by a continuous controller. The gripped object is then released and thrown in front of the agent.
 #
 # Note: for a more detailed explanation of the NavMesh see Habitat-sim Basics tutorial.
 
@@ -978,7 +955,7 @@ build_widget_ui(obj_attr_mgr, prim_attr_mgr)
 # @markdown A python Class to provide waypoints along a path given agent states
 
 
-class ContinuousPathFollower:
+class ContinuousPathFollower(object):
     def __init__(self, sim, path, agent_scene_node, waypoint_threshold):
         self._sim = sim
         self._points = path.points[:]
@@ -1048,8 +1025,8 @@ class ContinuousPathFollower:
                 wp_dist = np.linalg.norm(wp_disp)
 
 
-def setup_path_visualization(path_follower, vis_samples=100):
-    vis_objs = []
+def setup_path_visualization(sim, path_follower, vis_samples=100):
+    vis_ids = []
     sphere_handle = obj_attr_mgr.get_template_handles("uvSphereSolid")[0]
     sphere_template_cpy = obj_attr_mgr.get_template_by_handle(sphere_handle)
     sphere_template_cpy.scale *= 0.2
@@ -1057,33 +1034,33 @@ def setup_path_visualization(path_follower, vis_samples=100):
     print("template_id = " + str(template_id))
     if template_id < 0:
         return None
-    vis_objs.append(rigid_obj_mgr.add_object_by_template_handle(sphere_handle))
+    vis_ids.append(sim.add_object_by_handle(sphere_handle))
 
     for point in path_follower._points:
-        cp_obj = rigid_obj_mgr.add_object_by_template_handle(sphere_handle)
-        if cp_obj.object_id < 0:
-            print(cp_obj.object_id)
+        cp_id = sim.add_object_by_handle(sphere_handle)
+        if cp_id < 0:
+            print(cp_id)
             return None
-        cp_obj.translation = point
-        vis_objs.append(cp_obj)
+        sim.set_translation(point, cp_id)
+        vis_ids.append(cp_id)
 
     for i in range(vis_samples):
-        cp_obj = rigid_obj_mgr.add_object_by_template_handle("mini-sphere")
-        if cp_obj.object_id < 0:
-            print(cp_obj.object_id)
+        cp_id = sim.add_object_by_handle("mini-sphere")
+        if cp_id < 0:
+            print(cp_id)
             return None
-        cp_obj.translation = path_follower.pos_at(float(i / vis_samples))
-        vis_objs.append(cp_obj)
+        sim.set_translation(path_follower.pos_at(float(i / vis_samples)), cp_id)
+        vis_ids.append(cp_id)
 
-    for obj in vis_objs:
-        if obj.object_id < 0:
-            print(obj.object_id)
+    for obj_id in vis_ids:
+        if obj_id < 0:
+            print(obj_id)
             return None
 
-    for obj in vis_objs:
-        obj.motion_type = habitat_sim.physics.MotionType.KINEMATIC
+    for obj_id in vis_ids:
+        sim.set_object_motion_type(habitat_sim.physics.MotionType.KINEMATIC, obj_id)
 
-    return vis_objs
+    return vis_ids
 
 
 def track_waypoint(waypoint, rs, vc, dt=1.0 / 60.0):
@@ -1120,8 +1097,8 @@ def track_waypoint(waypoint, rs, vc, dt=1.0 / 60.0):
     )
 
 
-# grip/release and sync gripped object state kinematically
-class ObjectGripper:
+# grip/release and sync gripped object state kineamtically
+class ObjectGripper(object):
     def __init__(
         self,
         sim,
@@ -1131,38 +1108,42 @@ class ObjectGripper:
         self._sim = sim
         self._node = agent_scene_node
         self._offset = end_effector_offset
-        self._gripped_obj = None
+        self._gripped_obj_id = -1
         self._gripped_obj_buffer = 0  # bounding box y dimension offset of the offset
 
     def sync_states(self):
-        if self._gripped_obj is not None:
+        if self._gripped_obj_id != -1:
             agent_t = self._node.absolute_transformation_matrix()
             agent_t.translation += self._offset + mn.Vector3(
                 0, self._gripped_obj_buffer, 0.0
             )
-            self._gripped_obj.transformation = agent_t
+            sim.set_transformation(agent_t, self._gripped_obj_id)
 
-    def grip(self, obj):
-        if self._gripped_obj is not None:
+    def grip(self, obj_id):
+        if self._gripped_obj_id != -1:
             print("Oops, can't carry more than one item.")
             return
-        self._gripped_obj = obj
-        obj.motion_type = habitat_sim.physics.MotionType.KINEMATIC
-        self._gripped_obj_buffer = obj.aabb.size_y() / 2.0
+        self._gripped_obj_id = obj_id
+        sim.set_object_motion_type(habitat_sim.physics.MotionType.KINEMATIC, obj_id)
+        object_node = sim.get_object_scene_node(obj_id)
+        self._gripped_obj_buffer = object_node.cumulative_bb.size_y() / 2.0
         self.sync_states()
 
     def release(self):
-        if self._gripped_obj is None:
+        if self._gripped_obj_id == -1:
             print("Oops, can't release nothing.")
             return
-        self._gripped_obj.motion_type = habitat_sim.physics.MotionType.DYNAMIC
-        self._gripped_obj.linear_velocity = (
+        sim.set_object_motion_type(
+            habitat_sim.physics.MotionType.DYNAMIC, self._gripped_obj_id
+        )
+        sim.set_linear_velocity(
             self._node.absolute_transformation_matrix().transform_vector(
                 mn.Vector3(0, 0, -1.0)
             )
-            + mn.Vector3(0, 2.0, 0)
+            + mn.Vector3(0, 2.0, 0),
+            self._gripped_obj_id,
         )
-        self._gripped_obj = None
+        self._gripped_obj_id = -1
 
 
 # %%
@@ -1174,9 +1155,9 @@ class ObjectGripper:
 # @markdown - modified 1st person sensor placement
 sim_settings = make_default_settings()
 # fmt: off
-sim_settings["scene"] = os.path.join(data_path, "scene_datasets/mp3d_example/17DRP5sb8fy/17DRP5sb8fy.glb")  # @param{type:"string"}
+sim_settings["scene"] = "./data/scene_datasets/mp3d/17DRP5sb8fy/17DRP5sb8fy.glb"  # @param{type:"string"}
 # fmt: on
-sim_settings["sensor_pitch"] = 0.0
+sim_settings["sensor_pitch"] = 0
 sim_settings["sensor_height"] = 0.6
 sim_settings["color_sensor_3rd_person"] = True
 sim_settings["depth_sensor_1st_person"] = True
@@ -1205,18 +1186,16 @@ sim.config.sim_cfg.allow_sliding = True  # @param {type:"boolean"}
 
 print(sel_file_obj_handle)
 # load a selected target object and place it on the NavMesh
-obj_1 = rigid_obj_mgr.add_object_by_template_handle(sel_file_obj_handle)
+obj_id_1 = sim.add_object_by_handle(sel_file_obj_handle)
 
 # load the locobot_merged asset
 locobot_template_handle = obj_attr_mgr.get_file_template_handles("locobot")[0]
 
 # add robot object to the scene with the agent/camera SceneNode attached
-locobot_obj = rigid_obj_mgr.add_object_by_template_handle(
-    locobot_template_handle, sim.agents[0].scene_node
-)
+locobot_id = sim.add_object_by_handle(locobot_template_handle, sim.agents[0].scene_node)
 
 # set the agent's body to kinematic since we will be updating position manually
-locobot_obj.motion_type = habitat_sim.physics.MotionType.KINEMATIC
+sim.set_object_motion_type(habitat_sim.physics.MotionType.KINEMATIC, locobot_id)
 
 # create and configure a new VelocityControl structure
 # Note: this is NOT the object's VelocityControl, so it will not be consumed automatically in sim.step_physics
@@ -1227,7 +1206,7 @@ vel_control.controlling_ang_vel = True
 vel_control.ang_vel_is_local = True
 
 # reset observations and robot state
-locobot_obj.translation = sim.pathfinder.get_random_navigable_point()
+sim.set_translation(sim.pathfinder.get_random_navigable_point(), locobot_id)
 observations = []
 
 # get shortest path to the object from the agent position
@@ -1236,12 +1215,12 @@ path1 = habitat_sim.ShortestPath()
 path2 = habitat_sim.ShortestPath()
 while not found_path:
     if not sample_object_state(
-        sim, obj_1, from_navmesh=True, maintain_object_up=True, max_tries=1000
+        sim, obj_id_1, from_navmesh=True, maintain_object_up=True, max_tries=1000
     ):
         print("Couldn't find an initial object placement. Aborting.")
         break
-    path1.requested_start = locobot_obj.translation
-    path1.requested_end = obj_1.translation
+    path1.requested_start = sim.get_translation(locobot_id)
+    path1.requested_end = sim.get_translation(obj_id_1)
     path2.requested_start = path1.requested_end
     path2.requested_end = sim.pathfinder.get_random_navigable_point()
 
@@ -1250,30 +1229,32 @@ while not found_path:
 if not found_path:
     print("Could not find path to object, aborting!")
 
-vis_objs = []
+vis_ids = []
 
 recompute_successful = sim.recompute_navmesh(sim.pathfinder, default_nav_mesh_settings)
 if not recompute_successful:
     print("Failed to recompute navmesh 2!")
 
-gripper = ObjectGripper(sim, locobot_obj.root_scene_node, np.array([0.0, 0.6, 0.0]))
+gripper = ObjectGripper(
+    sim, sim.get_object_scene_node(locobot_id), np.array([0.0, 0.6, 0.0])
+)
 continuous_path_follower = ContinuousPathFollower(
-    sim, path1, locobot_obj.root_scene_node, waypoint_threshold=0.4
+    sim, path1, sim.get_object_scene_node(locobot_id), waypoint_threshold=0.4
 )
 
 show_waypoint_indicators = False  # @param {type:"boolean"}
 time_step = 1.0 / 30.0
 for i in range(2):
     if i == 1:
-        gripper.grip(obj_1)
+        gripper.grip(obj_id_1)
         continuous_path_follower = ContinuousPathFollower(
-            sim, path2, locobot_obj.root_scene_node, waypoint_threshold=0.4
+            sim, path2, sim.get_object_scene_node(locobot_id), waypoint_threshold=0.4
         )
 
     if show_waypoint_indicators:
-        for vis_obj in vis_objs:
-            rigid_obj_mgr.remove_object_by_id(vis_obj.object_id)
-        vis_objs = setup_path_visualization(continuous_path_follower)
+        for obj_id in vis_ids:
+            sim.remove_object(obj_id)
+        vis_ids = setup_path_visualization(sim, continuous_path_follower)
 
     # manually control the object's kinematic state via velocity integration
     start_time = sim.get_world_time()
@@ -1284,13 +1265,13 @@ for i in range(2):
     ):
         continuous_path_follower.update_waypoint()
         if show_waypoint_indicators:
-            vis_objs[0].translation = continuous_path_follower.waypoint
+            sim.set_translation(continuous_path_follower.waypoint, vis_ids[0])
 
-        if locobot_obj.object_id < 0:
-            print("locobot_id " + str(locobot_obj.object_id))
+        if locobot_id < 0:
+            print("locobot_id " + str(locobot_id))
             break
 
-        previous_rigid_state = locobot_obj.rigid_state
+        previous_rigid_state = sim.get_rigid_state(locobot_id)
 
         # set velocities based on relative waypoint position/direction
         track_waypoint(
@@ -1309,10 +1290,10 @@ for i in range(2):
         end_pos = sim.step_filter(
             previous_rigid_state.translation, target_rigid_state.translation
         )
-        locobot_obj.translation = end_pos
-        locobot_obj.rotation = target_rigid_state.rotation
+        sim.set_translation(end_pos, locobot_id)
+        sim.set_rotation(target_rigid_state.rotation, locobot_id)
 
-        # Check if a collision occurred
+        # Check if a collision occured
         dist_moved_before_filter = (
             target_rigid_state.translation - previous_rigid_state.translation
         ).dot()
@@ -1381,5 +1362,5 @@ if make_video:
     )
 
 # remove locobot while leaving the agent node for later use
-rigid_obj_mgr.remove_object_by_id(locobot_obj.object_id, delete_object_node=False)
-rigid_obj_mgr.remove_all_objects()
+sim.remove_object(locobot_id, delete_object_node=False)
+remove_all_objects(sim)

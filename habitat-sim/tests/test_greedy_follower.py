@@ -1,16 +1,8 @@
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
 import glob
 from os import path as osp
 
 import numpy as np
 import pytest
-
-# Need to import quaternion library here despite it not being used or else importing
-# habitat_sim below will cause an invalid free() when audio is enabled in sim compilation
-import quaternion  # noqa: F401
 import tqdm
 
 import habitat_sim
@@ -45,10 +37,6 @@ mp3d_base = osp.join(base_dir, "data/scene_datasets/mp3d")
 if test_all and osp.exists(mp3d_base):
     test_navmeshes += glob.glob(f"{mp3d_base}/*/*.navmesh")
 
-mp3d_example_base = osp.join(base_dir, "data/scene_datasets/mp3d_example")
-if test_all and osp.exists(mp3d_example_base):
-    test_navmeshes += glob.glob(f"{mp3d_example_base}/*/*.navmesh")
-
 
 @pytest.fixture(scope="module")
 def pbar():
@@ -82,7 +70,6 @@ def test_greedy_follower(test_navmesh, move_filter_fn, action_noise, pbar):
 
     scene_graph = habitat_sim.SceneGraph()
     agent = habitat_sim.Agent(scene_graph.get_root_node().create_child())
-    print(f"move_filter_fn : {move_filter_fn} action noise : {action_noise}")
     agent.controls.move_filter_fn = getattr(pathfinder, move_filter_fn)
 
     agent.agent_config.action_space["turn_left"].actuation.amount = TURN_DEGREE
@@ -164,7 +151,7 @@ def test_greedy_follower(test_navmesh, move_filter_fn, action_noise, pbar):
 
             agent.act(next_action)
 
-            agent_distance += float(np.linalg.norm(last_xyz - agent.state.position))
+            agent_distance += np.linalg.norm(last_xyz - agent.state.position)
             last_xyz = agent.state.position
 
             num_acts += 1

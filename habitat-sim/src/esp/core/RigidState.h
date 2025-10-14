@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -8,7 +8,7 @@
 #include <Magnum/Magnum.h>
 #include <Magnum/Math/Quaternion.h>
 
-#include "Esp.h"
+#include "esp.h"
 
 namespace esp {
 namespace core {
@@ -17,7 +17,7 @@ namespace core {
  * (quaternion) and translation.
  */
 struct RigidState {
-  RigidState() = default;
+  RigidState(){};
   RigidState(const Magnum::Quaternion& _rotation,
              const Magnum::Vector3& _translation)
       : rotation(_rotation), translation(_translation){};

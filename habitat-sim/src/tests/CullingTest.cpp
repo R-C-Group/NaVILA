@@ -1,23 +1,23 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 //
 #include <Corrade/Containers/Optional.h>
 #include <Corrade/TestSuite/Compare/Numeric.h>
 #include <Corrade/TestSuite/Tester.h>
-#include <Corrade/Utility/Path.h>
+#include <Corrade/Utility/Directory.h>
+#include <Magnum/EigenIntegration/Integration.h>
 #include <Magnum/GL/SampleQuery.h>
 #include <Magnum/Math/Frustum.h>
 #include <Magnum/Math/Intersection.h>
 #include <Magnum/Math/Range.h>
+#include <gtest/gtest.h>
 #include <string>
 
 #include "esp/assets/ResourceManager.h"
 #include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/RenderTarget.h"
 #include "esp/gfx/WindowlessContext.h"
-#include "esp/gfx_batch/DepthUnprojection.h"
-#include "esp/metadata/MetadataMediator.h"
 #include "esp/scene/SceneManager.h"
 
 #include "configure.h"
@@ -30,24 +30,15 @@ using esp::metadata::MetadataMediator;
 using esp::scene::SceneManager;
 using Magnum::Math::Literals::operator""_degf;
 
+namespace Test {
 // on GCC and Clang, the following namespace causes useful warnings to be
 // printed when you have accidentally unused variables or functions in the test
 namespace {
 struct CullingTest : Cr::TestSuite::Tester {
   explicit CullingTest();
-
-  // init, returns ref to scene graph
-  int setupTests();
-
   // tests
   void computeAbsoluteAABB();
   void frustumCulling();
-
- protected:
-  esp::logging::LoggingContext loggingContext_;
-  esp::gfx::WindowlessContext::uptr context_ = nullptr;
-  std::unique_ptr<ResourceManager> resourceManager_ = nullptr;
-  SceneManager::uptr sceneManager_ = nullptr;
 };
 
 CullingTest::CullingTest() {
@@ -57,41 +48,28 @@ CullingTest::CullingTest() {
   // clang-format on
 }
 
-int CullingTest::setupTests() {
-  // set up a default simulation config to initialize MM
-  auto cfg = esp::sim::SimulatorConfiguration{};
-  // setting values for stage load
-  cfg.loadSemanticMesh = false;
-  cfg.forceSeparateSemanticSceneGraph = false;
-  auto MM = MetadataMediator::create(cfg);
+void CullingTest::computeAbsoluteAABB() {
+  // must create a GL context which will be used in the resource manager
+  esp::gfx::WindowlessContext::uptr context_ =
+      esp::gfx::WindowlessContext::create_unique(0);
+
   // must declare these in this order due to avoid deallocation errors
-  if (!resourceManager_) {
-    resourceManager_ = std::make_unique<ResourceManager>(MM);
-  }
-  if (!sceneManager_) {
-    sceneManager_ = SceneManager::create_unique();
-  }
-  if (!context_) {
-    context_ = esp::gfx::WindowlessContext::create_unique(0);
-  }
+  auto MM = MetadataMediator::create();
+  ResourceManager resourceManager(MM);
+  SceneManager sceneManager;
   auto stageAttributesMgr = MM->getStageAttributesManager();
   std::string stageFile =
-      Cr::Utility::Path::join(TEST_ASSETS, "objects/5boxes.glb");
+      Cr::Utility::Directory::join(TEST_ASSETS, "objects/5boxes.glb");
   // create scene attributes file
   auto stageAttributes = stageAttributesMgr->createObject(stageFile, true);
-  int sceneID = sceneManager_->initSceneGraph();
 
-  std::vector<int> tempIDs{sceneID, esp::ID_UNDEFINED};
-  bool result = resourceManager_->loadStage(stageAttributes, nullptr, nullptr,
-                                            sceneManager_.get(), tempIDs);
-  CORRADE_VERIFY(result);
-  return sceneID;
-}
-
-void CullingTest::computeAbsoluteAABB() {
-  int sceneID = setupTests();
-  auto& sceneGraph = sceneManager_->getSceneGraph(sceneID);
+  int sceneID = sceneManager.initSceneGraph();
+  auto& sceneGraph = sceneManager.getSceneGraph(sceneID);
   auto& drawables = sceneGraph.getDrawables();
+  std::vector<int> tempIDs{sceneID, esp::ID_UNDEFINED};
+  bool result = resourceManager.loadStage(stageAttributes, nullptr,
+                                          &sceneManager, tempIDs, false);
+  CORRADE_VERIFY(result);
 
   std::vector<Mn::Range3D> aabbs;
   for (unsigned int iDrawable = 0; iDrawable < drawables.size(); ++iDrawable) {
@@ -145,16 +123,35 @@ void CullingTest::computeAbsoluteAABB() {
 }
 
 void CullingTest::frustumCulling() {
-  int sceneID = setupTests();
-  auto& sceneGraph = sceneManager_->getSceneGraph(sceneID);
+  // must create a GL context which will be used in the resource manager
+  esp::gfx::WindowlessContext::uptr context_ =
+      esp::gfx::WindowlessContext::create_unique(0);
+
+  // must declare these in this order due to avoid deallocation errors
+  auto MM = MetadataMediator::create();
+  ResourceManager resourceManager(MM);
+  SceneManager sceneManager;
+  auto stageAttributesMgr = MM->getStageAttributesManager();
+  std::string stageFile =
+      Cr::Utility::Directory::join(TEST_ASSETS, "objects/5boxes.glb");
+  // create scene attributes file
+  auto stageAttributes = stageAttributesMgr->createObject(stageFile, true);
+
+  // load the scene
+  int sceneID = sceneManager.initSceneGraph();
+
+  auto& sceneGraph = sceneManager.getSceneGraph(sceneID);
   // esp::scene::SceneNode& sceneRootNode = sceneGraph.getRootNode();
   auto& drawables = sceneGraph.getDrawables();
+  // const esp::assets::AssetInfo info =
+  //     esp::assets::AssetInfo::fromPath(stageFile);
 
+  std::vector<int> tempIDs{sceneID, esp::ID_UNDEFINED};
+  bool result = resourceManager.loadStage(stageAttributes, nullptr,
+                                          &sceneManager, tempIDs, false);
+  CORRADE_VERIFY(result);
   // set the camera
-  esp::scene::SceneNode agentNode = sceneGraph.getRootNode().createChild();
-  esp::scene::SceneNode cameraNode = agentNode.createChild();
-  esp::gfx::RenderCamera& renderCamera = *(new esp::gfx::RenderCamera(
-      cameraNode, esp::sensor::SemanticSensorTarget::SemanticID));
+  esp::gfx::RenderCamera& renderCamera = sceneGraph.getDefaultRenderCamera();
 
   // The camera to be set:
   // pos: {7.3589f, -6.9258f,4.9583f}
@@ -174,6 +171,8 @@ void CullingTest::frustumCulling() {
                                    100.0f,               // zfar
                                    39.6_degf);           // hfov
 
+  esp::scene::SceneNode agentNode = sceneGraph.getRootNode().createChild();
+  esp::scene::SceneNode cameraNode = agentNode.createChild();
   cameraNode.translate({7.3589f, -6.9258f, 4.9583f});
   const Mn::Vector3 axis{0.773, 0.334, 0.539};
   cameraNode.rotate(Mn::Math::Deg<float>(77.4f), axis.normalized());
@@ -191,7 +190,7 @@ void CullingTest::frustumCulling() {
   // create a render target
   Mn::Matrix4 projMtx = renderCamera.projectionMatrix();
   esp::gfx::RenderTarget::uptr target = esp::gfx::RenderTarget::create_unique(
-      frameBufferSize, esp::gfx_batch::calculateDepthUnprojection(projMtx));
+      frameBufferSize, esp::gfx::calculateDepthUnprojection(projMtx));
 
   // ============== Test 1 ==================
   // draw all the invisibles reported by cull()
@@ -260,7 +259,7 @@ void CullingTest::frustumCulling() {
         CORRADE_VERIFY(q.result<bool>());
 
         if (q.result<bool>()) {
-          ++numVisibleObjectsGroundTruth;
+          numVisibleObjectsGroundTruth++;
         }
       };
   for_each(drawableTransforms.begin(), newEndIter, renderOneDrawable);
@@ -275,5 +274,6 @@ void CullingTest::frustumCulling() {
   CORRADE_COMPARE(numVisibleObjects, numVisibleObjectsGroundTruth);
 }
 }  // namespace
+}  // namespace Test
 
-CORRADE_TEST_MAIN(CullingTest)
+CORRADE_TEST_MAIN(Test::CullingTest)

@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -15,14 +15,14 @@
 #include <Magnum/Trade/AbstractImporter.h>
 
 #include "BaseMesh.h"
-#include "esp/core/Esp.h"
+#include "esp/core/esp.h"
 
 namespace esp {
 namespace assets {
 
 /**
  * @brief Mesh data storage and loading for gltf format assets. See @ref
- * ResourceManager::loadMeshes.
+ * ResourceManager::loadGeneralMeshData.
  */
 class GenericMeshData : public BaseMesh {
  public:
@@ -36,15 +36,14 @@ class GenericMeshData : public BaseMesh {
     Magnum::GL::Mesh mesh;
   };
 
-  /**
-   * @brief Constructor. Sets asset type to be SupportedMeshType::GENERIC_MESH .
-   */
-  explicit GenericMeshData(bool needsNormals = true)
+  /** @brief Constructor. Sets @ref SupportedMeshType::GENERIC_MESH to identify
+   * the asset type.*/
+  GenericMeshData(bool needsNormals = true)
       : BaseMesh(SupportedMeshType::GENERIC_MESH),
         needsNormals_{needsNormals} {};
 
   /** @brief Destructor */
-  ~GenericMeshData() override = default;
+  virtual ~GenericMeshData(){};
 
   /**
    * @brief Compile the @ref renderingBuffer_ if first upload or forceReload is
@@ -52,12 +51,12 @@ class GenericMeshData : public BaseMesh {
    * @param forceReload If true, recompiles the @ref renderingBuffer_ (e.g. in
    * the case of data change after initial compilation).
    */
-  void uploadBuffersToGPU(bool forceReload = false) override;
+  virtual void uploadBuffersToGPU(bool forceReload = false) override;
 
   /**
-   * @brief Set mesh data from external source, and sets the @p collisionMesh_
+   * @brief Set mesh data from external source, and sets the @ref collisionMesh_
    * references.  Can be used for meshDatas that are manually synthesized, such
-   * as NavMesh.
+   * as NavMesh. Sets the @ref collisionMesh_ references.
    * @param meshData the meshData to be assigned.
    */
   void setMeshData(Magnum::Trade::MeshData&& meshData);
@@ -96,7 +95,7 @@ class GenericMeshData : public BaseMesh {
    * @ref renderingBuffer_.
    * @return Pointer to the compiled render mesh data.
    */
-  Magnum::GL::Mesh* getMagnumGLMesh() override;
+  virtual Magnum::GL::Mesh* getMagnumGLMesh() override;
 
  protected:
   /**
@@ -106,9 +105,6 @@ class GenericMeshData : public BaseMesh {
    */
   std::unique_ptr<RenderingBuffer> renderingBuffer_ = nullptr;
 
-  /**
-   * @brief Whether this mesh should have smooth normals generated
-   */
   bool needsNormals_ = true;
 
  private:

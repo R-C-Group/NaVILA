@@ -1,11 +1,11 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_GFX_MESHVISUALIZERDRAWABLE_H_
 #define ESP_GFX_MESHVISUALIZERDRAWABLE_H_
 
-#include <Magnum/Shaders/MeshVisualizerGL.h>
+#include <Magnum/Shaders/MeshVisualizer.h>
 #include "Drawable.h"
 #include "esp/gfx/Drawable.h"
 #include "esp/gfx/ShaderManager.h"
@@ -24,9 +24,9 @@ class MeshVisualizerDrawable : public Drawable {
    * @param group  Drawable group this drawable will be added to.
    */
   explicit MeshVisualizerDrawable(scene::SceneNode& node,
-                                  Magnum::Shaders::MeshVisualizerGL3D& shader,
+                                  Magnum::Shaders::MeshVisualizer3D& shader,
                                   Magnum::GL::Mesh& mesh,
-                                  DrawableConfiguration& cfg);
+                                  gfx::DrawableGroup* group);
 
  protected:
   /**
@@ -36,9 +36,9 @@ class MeshVisualizerDrawable : public Drawable {
    * @param camera                Camera to draw from.
    *
    */
-  void draw(const Magnum::Matrix4& transformationMatrix,
-            Magnum::SceneGraph::Camera3D& camera) override;
-  Magnum::Shaders::MeshVisualizerGL3D& shader_;
+  virtual void draw(const Magnum::Matrix4& transformationMatrix,
+                    Magnum::SceneGraph::Camera3D& camera) override;
+  Magnum::Shaders::MeshVisualizer3D& shader_;
 };
 
 }  // namespace gfx

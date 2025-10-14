@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
+# Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import itertools
+
 import numpy as np
 import pytest
-import quaternion as qt
+import quaternion  # noqa: F401
 
 import habitat_sim
 import habitat_sim.errors
@@ -28,9 +30,12 @@ def _delta_rotation(a, b):
     return np.arctan2(look_dir[0], -look_dir[2])
 
 
-@pytest.mark.parametrize("noise_multiplier", [1.0, 0.0])
-@pytest.mark.parametrize("robot", ["LoCoBot", "LoCoBot-Lite"])
-@pytest.mark.parametrize("controller", ["ILQR", "Proportional", "Movebase"])
+@pytest.mark.parametrize(
+    "noise_multiplier,robot,controller",
+    itertools.product(
+        [1.0, 0.0], ["LoCoBot", "LoCoBot-Lite"], ["ILQR", "Proportional", "Movebase"]
+    ),
+)
 def test_pyrobot_noisy_actions(noise_multiplier, robot, controller):
     np.random.seed(0)
     scene_graph = SceneGraph()
@@ -89,7 +94,7 @@ def test_pyrobot_noisy_actions(noise_multiplier, robot, controller):
 
     for base_action in {act.replace("noisy_", "") for act in agent_config.action_space}:
         state = agent.state
-        state.rotation = qt.quaternion(1, 0, 0, 0)
+        state.rotation = np.quaternion(1, 0, 0, 0)
         agent.state = state
         agent.act(base_action)
         base_state = agent.state

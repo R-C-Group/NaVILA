@@ -1,14 +1,16 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #include "RenderCamera.h"
 
+#include <Magnum/EigenIntegration/Integration.h>
 #include <Magnum/Math/Frustum.h>
 #include <Magnum/Math/Intersection.h>
 #include <Magnum/Math/Range.h>
 #include <Magnum/SceneGraph/Drawable.h>
-#include <algorithm>
+#include "esp/gfx/Drawable.h"
+#include "esp/gfx/DrawableGroup.h"
 #include "esp/scene/SceneGraph.h"
 
 namespace Mn = Magnum;
@@ -19,11 +21,11 @@ namespace gfx {
 
 /**
  * @brief do frustum culling with temporal coherence
- * @param range the axis-aligned bounding box
- * @param frustum the frustum
- * @param frustumPlaneIndex the frustum plane in last frame that culled the
+ * @param range, the axis-aligned bounding box
+ * @param frustum, the frustum
+ * @param frustumPlaneIndex, the frustum plane in last frame that culled the
  * aabb (default: 0)
- * @return NullOpt if aabb intersects the frustum, otherwise the frustum plane
+ * @return NullOpt if aabb intersects the frustum, otherwise the fustum plane
  * that culls the aabb
  */
 Cr::Containers::Optional<int> rangeFrustum(const Mn::Range3D& range,
@@ -40,32 +42,36 @@ Cr::Containers::Optional<int> rangeFrustum(const Mn::Range3D& range,
 
     const float d = Mn::Math::dot(center, plane.xyz());
     const float r = Mn::Math::dot(extent, absPlaneNormal);
-    if (d + r < -2.0f * plane.w())
+    if (d + r < -2.0 * plane.w())
       return Cr::Containers::Optional<int>{index};
   }
 
   return Cr::Containers::NullOpt;
 }
 
-RenderCamera::RenderCamera(scene::SceneNode& node,
-                           esp::scene::SceneNodeSemanticDataIDX semanticDataIDX)
-    : MagnumCamera{node}, semanticInfoIDX_(semanticDataIDX) {
-  // Set to using the base semantic idx assigned to this camera
-  semanticIDXToUse_ = semanticInfoIDX_;
-  node.setType(scene::SceneNodeType::Camera);
+RenderCamera::RenderCamera(scene::SceneNode& node) : MagnumCamera{node} {
+  node.setType(scene::SceneNodeType::CAMERA);
   setAspectRatioPolicy(Mn::SceneGraph::AspectRatioPolicy::NotPreserved);
 }
 
 RenderCamera::RenderCamera(scene::SceneNode& node,
-                           esp::scene::SceneNodeSemanticDataIDX semanticDataIDX,
                            const Mn::Vector3& eye,
                            const Mn::Vector3& target,
                            const Mn::Vector3& up)
 
-    : RenderCamera(node, semanticDataIDX) {
+    : RenderCamera(node) {
   // once it is attached, set the transformation
   resetViewingParameters(eye, target, up);
 }
+
+RenderCamera::RenderCamera(scene::SceneNode& node,
+                           const vec3f& eye,
+                           const vec3f& target,
+                           const vec3f& up)
+    : RenderCamera(node,
+                   Mn::Vector3{eye},
+                   Mn::Vector3{target},
+                   Mn::Vector3{up}) {}
 
 RenderCamera& RenderCamera::resetViewingParameters(const Mn::Vector3& eye,
                                                    const Mn::Vector3& target,
@@ -101,7 +107,9 @@ RenderCamera& RenderCamera::setOrthoProjectionMatrix(int width,
   return setProjectionMatrix(width, height, orthoMat);
 }
 
-size_t RenderCamera::cull(DrawableTransforms& drawableTransforms) {
+size_t RenderCamera::cull(
+    std::vector<std::pair<std::reference_wrapper<Mn::SceneGraph::Drawable3D>,
+                          Mn::Matrix4>>& drawableTransforms) {
   // camera frustum relative to world origin
   const Mn::Frustum frustum =
       Mn::Frustum::fromMatrix(projectionMatrix() * cameraMatrix());
@@ -112,58 +120,58 @@ size_t RenderCamera::cull(DrawableTransforms& drawableTransforms) {
                           Mn::Matrix4>& a) {
         // obtain the absolute aabb
         auto& node = static_cast<scene::SceneNode&>(a.first.get().object());
-        // This updates the AABB for dynamic objects if needed
-        node.setClean();
-        const Mn::Range3D& aabb = node.getAbsoluteAABB();
-
-        Cr::Containers::Optional<int> culledPlane =
-            rangeFrustum(aabb, frustum, node.getFrustumPlaneIndex());
-        if (culledPlane) {
-          node.setFrustumPlaneIndex(*culledPlane);
+        Corrade::Containers::Optional<Mn::Range3D> aabb =
+            node.getAbsoluteAABB();
+        if (aabb) {
+          // if it has an absolute aabb, it is a static mesh
+          Cr::Containers::Optional<int> culledPlane =
+              rangeFrustum(*aabb, frustum, node.getFrustumPlaneIndex());
+          if (culledPlane) {
+            node.setFrustumPlaneIndex(*culledPlane);
+          }
+          // if it has value, it means the aabb is culled
+          return (culledPlane != Cr::Containers::NullOpt);
+        } else {
+          // keep the drawable if its node does not have an absolute AABB
+          return false;
         }
-        // if it has value, it means the aabb is culled
-        return (culledPlane != Cr::Containers::NullOpt);
       });
 
   return (newEndIter - drawableTransforms.begin());
 }
 
-size_t RenderCamera::removeNonObjects(DrawableTransforms& drawableTransforms) {
+size_t RenderCamera::removeNonObjects(
+    std::vector<std::pair<std::reference_wrapper<Mn::SceneGraph::Drawable3D>,
+                          Mn::Matrix4>>& drawableTransforms) {
   auto newEndIter = std::remove_if(
       drawableTransforms.begin(), drawableTransforms.end(),
       [&](const std::pair<std::reference_wrapper<Mn::SceneGraph::Drawable3D>,
                           Mn::Matrix4>& a) {
         auto& node = static_cast<scene::SceneNode&>(a.first.get().object());
-        // don't remove OBJECT types
-        return (node.getType() != scene::SceneNodeType::Object);
+        if (node.getType() == scene::SceneNodeType::OBJECT) {
+          // don't remove OBJECT types
+          return false;
+        }
+        return true;
       });
   return (newEndIter - drawableTransforms.begin());
 }
 
-uint32_t RenderCamera::draw(DrawableTransforms& drawableTransforms,
-                            Flags flags) {
-  previousNumVisibleDrawables_ = drawableTransforms.size();
-
-  if (flags & Flag::UseDrawableIdAsObjectId) {
-    semanticIDXToUse_ = esp::scene::SceneNodeSemanticDataIDX::DrawableID;
+uint32_t RenderCamera::draw(MagnumDrawableGroup& drawables, Flags flags) {
+  previousNumVisibleDrawables_ = drawables.size();
+  if (flags == Flags()) {  // empty set
+    MagnumCamera::draw(drawables);
+    return drawables.size();
   }
 
-  MagnumCamera::draw(drawableTransforms);
+  if (flags & Flag::UseDrawableIdAsObjectId) {
+    useDrawableIds_ = true;
+  }
 
-  // Reset to using the base semantic idx assigned to this camera
-  semanticIDXToUse_ = semanticInfoIDX_;
+  std::vector<std::pair<std::reference_wrapper<Mn::SceneGraph::Drawable3D>,
+                        Mn::Matrix4>>
+      drawableTransforms = drawableTransformations(drawables);
 
-  return drawableTransforms.size();
-}
-
-uint32_t RenderCamera::draw(MagnumDrawableGroup& drawables, Flags flags) {
-  auto drawableTransforms = drawableTransformations(drawables);
-  filterTransforms(drawableTransforms, flags);
-  return draw(drawableTransforms, flags);
-}
-
-size_t RenderCamera::filterTransforms(DrawableTransforms& drawableTransforms,
-                                      Flags flags) {
   if (flags & Flag::ObjectsOnly) {
     // draw just the OBJECTS
     size_t numObjects = removeNonObjects(drawableTransforms);
@@ -180,11 +188,16 @@ size_t RenderCamera::filterTransforms(DrawableTransforms& drawableTransforms,
         drawableTransforms.end());
   }
 
+  MagnumCamera::draw(drawableTransforms);
+
+  // reset
+  if (useDrawableIds_) {
+    useDrawableIds_ = false;
+  }
   return drawableTransforms.size();
 }
 
-esp::geo::Ray RenderCamera::unproject(const Mn::Vector2i& viewportPosition,
-                                      bool normalized) {
+esp::geo::Ray RenderCamera::unproject(const Mn::Vector2i& viewportPosition) {
   esp::geo::Ray ray;
   ray.origin = object().absoluteTranslation();
 
@@ -195,23 +208,12 @@ esp::geo::Ray RenderCamera::unproject(const Mn::Vector2i& viewportPosition,
       2 * Magnum::Vector2{viewPos} / Magnum::Vector2{viewport()} -
           Magnum::Vector2{1.0f},
       1.0};
-  const Mn::Matrix4 projMat = projectionMatrix();
-
-  // compute the far plane distance
-  // If projMat[3][3] == 0 then perspective, otherwise ortho
-  const Mn::Float farDistance =
-      (projMat[3][3] == 0 ? projMat.perspectiveProjectionFar()
-                          : projMat.orthographicProjectionFar());
 
   ray.direction =
-      ((object().absoluteTransformationMatrix() * invertedProjectionMatrix)
+      ((object().absoluteTransformationMatrix() * projectionMatrix().inverted())
            .transformPoint(normalizedPos) -
-       ray.origin) /
-      farDistance;
-
-  if (normalized) {
-    ray.direction = ray.direction.normalized();
-  }
+       ray.origin)
+          .normalized();
   return ray;
 }
 

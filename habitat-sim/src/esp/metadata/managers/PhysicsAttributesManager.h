@@ -1,13 +1,13 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-#ifndef ESP_METADATA_MANAGERS_PHYSICSATTRIBUTESMANAGER_H_
-#define ESP_METADATA_MANAGERS_PHYSICSATTRIBUTESMANAGER_H_
+#ifndef ESP_METADATA_MANAGERS_PHYSICSATTRIBUTEMANAGER_H_
+#define ESP_METADATA_MANAGERS_PHYSICSATTRIBUTEMANAGER_H_
 
-#include <utility>
+#include "AttributesManagerBase.h"
 
-#include "AbstractAttributesManager.h"
+#include "ObjectAttributesManager.h"
 
 #include "esp/metadata/attributes/PhysicsManagerAttributes.h"
 #include "esp/physics/configure.h"
@@ -17,20 +17,14 @@ namespace Cr = Corrade;
 namespace esp {
 namespace metadata {
 namespace managers {
-
 class PhysicsAttributesManager
-    : public AbstractAttributesManager<attributes::PhysicsManagerAttributes,
-                                       ManagedObjectAccess::Copy> {
+    : public AttributesManager<attributes::PhysicsManagerAttributes> {
  public:
   PhysicsAttributesManager()
-      : AbstractAttributesManager<attributes::PhysicsManagerAttributes,
-                                  ManagedObjectAccess::Copy>::
-            AbstractAttributesManager("Physics Manager",
-                                      "physics_config.json") {
-    this->copyConstructorMap_["PhysicsManagerAttributes"] =
-        &PhysicsAttributesManager::createObjCopyCtorMapEntry<
-            attributes::PhysicsManagerAttributes>;
-  }  // ctor
+      : AttributesManager<attributes::PhysicsManagerAttributes>::
+            AttributesManager("Physics Manager", "physics_config.json") {
+    buildCtorFuncPtrMaps();
+  }
 
   /**
    * @brief Creates an instance of a physics world template described by passed
@@ -64,18 +58,17 @@ class PhysicsAttributesManager
   void setValsFromJSONDoc(attributes::PhysicsManagerAttributes::ptr attribs,
                           const io::JsonGenericValue& jsonConfig) override;
 
-  /**
-   * @brief This function will be called to finalize attributes' paths before
-   * registration, moving fully qualified paths to the appropriate hidden
-   * attribute fields. This can also be called without registration to make sure
-   * the paths specified in an attributes are properly configured.
-   * @param attributes The attributes to be filtered.
-   */
-  void finalizeAttrPathsBeforeRegister(
-      CORRADE_UNUSED const attributes::PhysicsManagerAttributes::ptr&
-          attributes) const override {}
-
  protected:
+  /**
+   * @brief Physics Manager Attributes has no reason to check this value
+   * @param handle String name of primitive asset attributes desired
+   * @return whether handle exists or not in asset attributes library
+   */
+  bool isValidPrimitiveAttributes(
+      CORRADE_UNUSED const std::string& handle) override {
+    return false;
+  }
+
   /**
    * @brief Used Internally.  Create and configure newly-created attributes with
    * any default values, before any specific values are set.
@@ -101,61 +94,58 @@ class PhysicsAttributesManager
 
   /**
    * @brief This method will perform any necessary updating that is
-   * AbstractAttributesManager-specific upon template removal, such as removing
-   * a specific template handle from the list of file-based template handles in
-   * ObjectAttributesManager.  This should only be called @ref
-   * esp::core::managedContainers::ManagedContainerBase.
+   * attributesManager-specific upon template removal, such as removing a
+   * specific template handle from the list of file-based template handles in
+   * ObjectAttributesManager.  This should only be called internally.
    *
    * @param templateID the ID of the template to remove
    * @param templateHandle the string key of the attributes desired.
    */
-  void deleteObjectInternalFinalize(
+  void updateObjectHandleLists(
       CORRADE_UNUSED int templateID,
       CORRADE_UNUSED const std::string& templateHandle) override {}
 
   /**
-   * @brief Not required for this manager.
+   * @brief Add a copy of the @ref
+   * esp::metadata::attributes::PhysicsManagerAttributes shared_ptr object to
+   * the @ref objectLibrary_.
    *
-   * This method will perform any essential updating to the managed object
-   * before registration is performed. If this updating fails, registration will
-   * also fail.
-   * @param object the managed object to be registered
-   * @param objectHandle the name to register the managed object with.
-   * Expected to be valid.
-   * @param forceRegistration Should register object even if conditional
+   * @param physicsAttributesTemplate The attributes template.
+   * @param physicsAttributesHandle The key for referencing the template in the
+   * @ref objectLibrary_.
+   * @param forceRegistration Will register object even if conditional
    * registration checks fail.
-   * @return Whether the preregistration has succeeded and what handle to use to
-   * register the object if it has.
+   * @return The index in the @ref objectLibrary_ of object
+   * template.
    */
-  core::managedContainers::ManagedObjectPreregistration
-  preRegisterObjectFinalize(
-      CORRADE_UNUSED attributes::PhysicsManagerAttributes::ptr object,
-      CORRADE_UNUSED const std::string& objectHandle,
+  int registerObjectFinalize(
+      attributes::PhysicsManagerAttributes::ptr physicsAttributesTemplate,
+      const std::string& physicsAttributesHandle,
       CORRADE_UNUSED bool forceRegistration) override {
-    // No pre-registration conditioning performed
-    return core::managedContainers::ManagedObjectPreregistration::Success;
-  }
-
-  /**
-   * @brief Not required for this manager.
-   *
-   * This method will perform any final manager-related handling after
-   * successfully registering an object.
-   *
-   * See @ref esp::attributes::managers::ObjectAttributesManager for an example.
-   *
-   * @param objectID the ID of the successfully registered managed object
-   * @param objectHandle The name of the managed object
-   */
-  void postRegisterObjectHandling(
-      CORRADE_UNUSED int objectID,
-      CORRADE_UNUSED const std::string& objectHandle) override {}
+    // adds template to library, and returns either the ID of the existing
+    // template referenced by physicsAttributesHandle, or the next available ID
+    // if not found.
+    int physicsTemplateID = this->addObjectToLibrary(physicsAttributesTemplate,
+                                                     physicsAttributesHandle);
+    return physicsTemplateID;
+  }  // PhysicsAttributesManager::registerObjectFinalize
 
   /**
    * @brief Any physics-attributes-specific resetting that needs to happen on
    * reset.
    */
   void resetFinalize() override {}
+
+  /**
+   * @brief This function will assign the appropriately configured function
+   * pointer for the copy constructor as required by
+   * AttributesManager<PhysicsSceneAttributes::ptr>
+   */
+  void buildCtorFuncPtrMaps() override {
+    this->copyConstructorMap_["PhysicsManagerAttributes"] =
+        &PhysicsAttributesManager::createObjectCopy<
+            attributes::PhysicsManagerAttributes>;
+  }  // PhysicsAttributesManager::buildCtorFuncPtrMaps
 
   // instance vars
 
@@ -168,4 +158,4 @@ class PhysicsAttributesManager
 }  // namespace metadata
 }  // namespace esp
 
-#endif  // ESP_METADATA_MANAGERS_PHYSICSATTRIBUTESMANAGER_H_
+#endif  // ESP_METADATA_MANAGERS_PHYSICSATTRIBUTEMANAGER_H_

@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -10,6 +10,8 @@
 #include <map>
 #include <sstream>
 #include <string>
+
+#include "esp/io/io.h"
 
 namespace esp {
 namespace scene {
@@ -50,23 +52,23 @@ static const std::map<char, std::string> kRegionCategoryMap = {
 };
 
 int Mp3dObjectCategory::index(const std::string& mapping) const {
-  if (mapping.empty() || mapping == "mpcat40") {
+  if (mapping == "" || mapping == "mpcat40") {
     return mpcat40Index_;
   } else if (mapping == "raw") {
     return categoryMappingIndex_;
   } else {
-    ESP_ERROR() << "Unknown SemanticCategory mapping" << mapping;
+    LOG(ERROR) << "Unknown SemanticCategory mapping" << mapping;
     return ID_UNDEFINED;
   }
 }
 
 std::string Mp3dObjectCategory::name(const std::string& mapping) const {
-  if (mapping.empty() || mapping == "mpcat40") {
+  if (mapping == "" || mapping == "mpcat40") {
     return mpcat40Name_;
   } else if (mapping == "raw") {
     return categoryMappingName_;
   } else {
-    ESP_ERROR() << "Unknown SemanticCategory mapping" << mapping;
+    LOG(ERROR) << "Unknown SemanticCategory mapping" << mapping;
     return "";
   }
 }
@@ -80,81 +82,70 @@ std::string Mp3dRegionCategory::name(const std::string&) const {
   return kRegionCategoryMap.at(labelCode_);
 }
 
-bool SemanticScene::loadMp3dHouse(const std::string& houseFilename,
-                                  SemanticScene& scene,
-                                  const Mn::Quaternion& rotation) {
-  if (!checkFileExists(houseFilename, "loadMp3dHouse")) {
+bool SemanticScene::loadMp3dHouse(
+    const std::string& houseFilename,
+    SemanticScene& scene,
+    const quatf& rotation /* = quatf::FromTwoVectors(-vec3f::UnitZ(),
+                                                       geo::ESP_GRAVITY) */ ) {
+  if (!io::exists(houseFilename)) {
+    LOG(ERROR) << "Could not load file " << houseFilename;
     return false;
   }
+
+  const bool hasWorldRotation = !rotation.isApprox(quatf::Identity());
+
+  auto getVec3f = [&](const std::vector<std::string>& tokens, int offset,
+                      bool applyRotation = true) -> vec3f {
+    const float x = std::stof(tokens[offset]);
+    const float y = std::stof(tokens[offset + 1]);
+    const float z = std::stof(tokens[offset + 2]);
+    vec3f p = vec3f(x, y, z);
+    if (applyRotation && hasWorldRotation) {
+      p = rotation * p;
+    }
+    return p;
+  };
+
+  auto getBBox = [&](const std::vector<std::string>& tokens,
+                     int offset) -> box3f {
+    // Get the bounding box without rotating as rotating min/max is odd
+    box3f sceneBox{getVec3f(tokens, offset, /*applyRotation=*/false),
+                   getVec3f(tokens, offset + 3, /*applyRotation=*/false)};
+    if (!hasWorldRotation)
+      return sceneBox;
+
+    // Apply the rotation to center/sizes
+    const vec3f worldCenter = rotation * sceneBox.center();
+    const vec3f worldHalfSizes =
+        (rotation * sceneBox.sizes()).array().abs().matrix() / 2.0f;
+    // Then remake the box with min/max computed from rotated center/size
+    return box3f{(worldCenter - worldHalfSizes).eval(),
+                 (worldCenter + worldHalfSizes).eval()};
+  };
+
+  auto getOBB = [&](const std::vector<std::string>& tokens, int offset) {
+    const vec3f center = getVec3f(tokens, offset);
+
+    // Don't need to apply rotation here, it'll already be added in by getVec3f
+    mat3f boxRotation;
+    boxRotation.col(0) << getVec3f(tokens, offset + 3);
+    boxRotation.col(1) << getVec3f(tokens, offset + 6);
+    boxRotation.col(2) << boxRotation.col(0).cross(boxRotation.col(1));
+
+    // Don't apply the world rotation here, that'll get added by boxRotation
+    const vec3f radius = getVec3f(tokens, offset + 9, /*applyRotation=*/false);
+
+    return geo::OBB(center, 2 * radius, quatf(boxRotation));
+  };
 
   // open stream and determine house format version
   std::ifstream ifs = std::ifstream(houseFilename);
   std::string header;
   std::getline(ifs, header);
   if (header != "ASCII 1.1") {
-    ESP_ERROR() << "Unsupported Mp3d House format header" << header
-                << "in file name" << houseFilename;
+    LOG(ERROR) << "Unsupported House format header " << header;
     return false;
   }
-
-  return buildMp3dHouse(ifs, scene, rotation);
-}  // SemanticScene::loadMp3dHouse
-
-bool SemanticScene::buildMp3dHouse(std::ifstream& ifs,
-                                   SemanticScene& scene,
-                                   const Mn::Quaternion& rotation) {
-  const bool hasWorldRotation =
-      rotation != Mn::Quaternion(Mn::Math::IdentityInit);
-
-  auto getVector3 = [&](const std::vector<std::string>& tokens, int offset,
-                        bool applyRotation = true) -> Mn::Vector3 {
-    const float x = std::stof(tokens[offset]);
-    const float y = std::stof(tokens[offset + 1]);
-    const float z = std::stof(tokens[offset + 2]);
-    Mn::Vector3 p(x, y, z);
-    if (applyRotation && hasWorldRotation) {
-      p = rotation.transformVectorNormalized(p);
-    }
-    return p;
-  };
-
-  auto getBBox = [&](const std::vector<std::string>& tokens,
-                     int offset) -> Mn::Range3D {
-    // Get the bounding box without rotating as rotating min/max is odd
-    Mn::Range3D sceneBox{
-        getVector3(tokens, offset, /*applyRotation=*/false),
-        getVector3(tokens, offset + 3, /*applyRotation=*/false)};
-    if (!hasWorldRotation)
-      return sceneBox;
-
-    // Apply the rotation to center/sizes
-    const Mn::Vector3 worldCenter =
-        rotation.transformVectorNormalized(sceneBox.center());
-
-    const Mn::Vector3 worldHalfSizes =
-        abs(rotation.transformVectorNormalized(sceneBox.size())) / 2.0f;
-    // Then remake the box with min/max computed from rotated center/size
-    return Mn::Range3D{(worldCenter - worldHalfSizes),
-                       (worldCenter + worldHalfSizes)};
-  };
-
-  auto getOBB = [&](const std::vector<std::string>& tokens, int offset) {
-    const Mn::Vector3 center = getVector3(tokens, offset);
-
-    // Don't need to apply rotation here, it'll already be added in by
-    // getVector3
-    Mn::Matrix3 boxRotation;
-    boxRotation[0] = getVector3(tokens, offset + 3);
-    boxRotation[1] = getVector3(tokens, offset + 6);
-    boxRotation[2] = Mn::Math::cross(boxRotation[0], boxRotation[1]);
-
-    // Don't apply the world rotation here, that'll get added by boxRotation
-    const Mn::Vector3 radius =
-        getVector3(tokens, offset + 9, /*applyRotation=*/false);
-
-    return geo::OBB(center, 2 * radius,
-                    Mn::Quaternion::fromMatrix(boxRotation));
-  };
 
   scene.categories_.clear();
   scene.levels_.clear();
@@ -166,8 +157,7 @@ bool SemanticScene::buildMp3dHouse(std::ifstream& ifs,
     if (line.empty()) {
       continue;
     }
-    const std::vector<std::string> tokens =
-        Cr::Utility::String::splitWithoutEmptyParts(line, ' ');
+    const std::vector<std::string> tokens = io::tokenize(line, " ", 0, true);
     switch (line[0]) {
       case 'H': {  // house
         // H name label #images #panoramas #vertices #surfaces #segments
@@ -196,7 +186,7 @@ bool SemanticScene::buildMp3dHouse(std::ifstream& ifs,
         level->index_ = std::stoi(tokens[1]);
         // NOTE tokens[2] is number of regions in level which we don't need
         level->labelCode_ = tokens[3];
-        level->position_ = getVector3(tokens, 4);
+        level->position_ = getVec3f(tokens, 4);
         level->bbox_ = getBBox(tokens, 7);
         break;
       }
@@ -208,7 +198,7 @@ bool SemanticScene::buildMp3dHouse(std::ifstream& ifs,
         region->index_ = std::stoi(tokens[1]);
         region->parentIndex_ = std::stoi(tokens[2]);
         region->category_ = std::make_shared<Mp3dRegionCategory>(tokens[5][0]);
-        region->position_ = getVector3(tokens, 6);
+        region->position_ = getVec3f(tokens, 6);
         region->bbox_ = getBBox(tokens, 9);
         if (region->parentIndex_ >= 0) {
           region->level_ = scene.levels_[region->parentIndex_];
@@ -291,10 +281,9 @@ bool SemanticScene::buildMp3dHouse(std::ifstream& ifs,
       }
     }
   }
-  scene.hasVertColors_ = true;
-  return true;
 
-}  // SemanticScene::buildMp3dHouse
+  return true;
+}
 
 }  // namespace scene
 }  // namespace esp

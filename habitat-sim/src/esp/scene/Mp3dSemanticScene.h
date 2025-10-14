@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -26,7 +26,7 @@ struct Mp3dObjectCategory : public SemanticCategory {
 };
 
 struct Mp3dRegionCategory : public SemanticCategory {
-  explicit Mp3dRegionCategory(const char labelCode) : labelCode_(labelCode) {}
+  Mp3dRegionCategory(const char labelCode) : labelCode_(labelCode) {}
 
   int index(const std::string& mapping) const override;
 

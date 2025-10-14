@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
+# Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
 import sqlite3
 from io import StringIO
 from unittest.mock import patch
-
-# Need to import quaternion library here despite it not being used or else importing
-# habitat_sim below will cause an invalid free() when audio is enabled in sim compilation
-import quaternion  # noqa: F401
 
 from habitat_sim.utils import compare_profiles
 
@@ -19,6 +15,7 @@ from habitat_sim.utils import compare_profiles
 # profiling events. Verify compare_profiles functionality including creating and
 # printing a timing summary.
 def test_compare_profiles():
+
     c = sqlite3.connect(":memory:")
 
     # Parse a sqlite database which is missing the expected table.

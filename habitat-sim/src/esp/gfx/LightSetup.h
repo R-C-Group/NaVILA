@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -17,19 +17,11 @@ namespace gfx {
 
 enum class LightPositionModel {
   /** @brief Light position is relative to the camera */
-  Camera = 0,
+  CAMERA = 0,
   /** @brief Light position is relative to scene */
-  Global = 1,
+  GLOBAL = 1,
   /** @brief Light position is relative to the object being rendered */
-  Object = 2,
-};
-
-enum class LightType {
-  /** @brief The type of light described by a light info*/
-  Point = 0,
-  Directional = 1,
-  Spot = 2,
-
+  OBJECT = 2,
 };
 
 /** @brief Contains a single light's information. */
@@ -40,7 +32,7 @@ struct LightInfo {
   // directional light with no distance attenuation.
   Magnum::Vector4 vector;
   Magnum::Color3 color{1};
-  LightPositionModel model = LightPositionModel::Global;
+  LightPositionModel model = LightPositionModel::GLOBAL;
 };
 
 bool operator==(const LightInfo& a, const LightInfo& b);
@@ -64,20 +56,6 @@ Magnum::Vector4 getLightPositionRelativeToCamera(
     const Magnum::Matrix4& cameraMatrix);
 
 /**
- * @brief Get light position in world space for a @ref LightInfo and a
- * rendered object. light.position and the return value are Vector4, with
- * w == 1 for positions and w == 0 for directions
- *
- * @param transformationMatrix Describes object position relative to camera
- * @param cameraMatrix Describes world position relative
- * @return Magnum::Vector4 Light position in world space
- */
-Magnum::Vector4 getLightPositionRelativeToWorld(
-    const LightInfo& light,
-    const Magnum::Matrix4& transformationMatrix,
-    const Magnum::Matrix4& cameraMatrix);
-
-/**
  * @brief Get a @ref LightSetup with lights at the corners of a box
  */
 LightSetup getLightsAtBoxCorners(
@@ -91,7 +69,7 @@ LightSetup getLightsAtBoxCorners(
 LightSetup getDefaultLights();
 
 /**
- * @brief Get a single, combined ambient light color for use with the Phong
+ * @brief Get get a single, combined ambient light color for use with the Phong
  * lighting model.
  */
 Magnum::Color3 getAmbientLightColor(const LightSetup& lightSetup);

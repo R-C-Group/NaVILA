@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -11,111 +11,21 @@
 
 #include "JsonBuiltinTypes.h"
 
-#include "esp/core/Logging.h"
+#include "esp/core/logging.h"
 
 #include <Corrade/Containers/Optional.h>
 #include <Magnum/Magnum.h>
-#include <Magnum/Math/Color.h>
-#include <Magnum/Math/Matrix3.h>
+#include <Magnum/Math/Matrix4.h>
 #include <Magnum/Math/Quaternion.h>
 
 namespace esp {
 namespace io {
 
-/**
- * @brief Specialization to handle Magnum::Matrix3 values. Parses passed value
- * into JsonGenericValue.
- *
- * @param mat Source Magnum::Matrix3 to parse into Json
- * @param allocator
- * @return Json value containing data
- */
-JsonGenericValue toJsonValue(const Magnum::Matrix3& mat,
-                             JsonAllocator& allocator);
-/**
- * @brief Specialization to handle Magnum::Matrix3 values. Populate passed @p
- * val with value. Returns whether successfully populated, or not. Logs an error
- * if inappropriate type.
- *
- * @param obj json value to parse
- * @param val destination value to be populated
- * @return whether successful or not
- */
-bool fromJsonValue(const JsonGenericValue& obj, Magnum::Matrix3& val);
+inline JsonGenericValue toJsonValue(const Magnum::Vector3& vec,
+                                    JsonAllocator& allocator) {
+  return toJsonArrayHelper(vec.data(), 3, allocator);
+}
 
-/**
- * @brief Specialization to handle Magnum::Matrix4 values. Parses passed value
- * into JsonGenericValue.
- *
- * @param mat Source Magnum::Matrix3 to parse into Json
- * @param allocator
- * @return Json value containing data
- */
-JsonGenericValue toJsonValue(const Magnum::Matrix4& mat,
-                             JsonAllocator& allocator);
-/**
- * @brief Specialization to handle Magnum::Matrix4 values. Populate passed @p
- * val with value. Returns whether successfully populated, or not. Logs an error
- * if inappropriate type.
- *
- * @param obj json value to parse
- * @param val destination value to be populated
- * @return whether successful or not
- */
-bool fromJsonValue(const JsonGenericValue& obj, Magnum::Matrix4& val);
-
-/**
- * @brief Specialization to handle Magnum::Vector2 values. Parses passed value
- * into JsonGenericValue.
- *
- * @param vec Source Magnum::Vector2 to parse into Json
- * @param allocator
- * @return Json value containing data
- */
-JsonGenericValue toJsonValue(const Magnum::Vector2& vec,
-                             JsonAllocator& allocator);
-/**
- * @brief Specialization to handle Magnum::Vector2 values. Populate passed @p
- * val with value. Returns whether successfully populated, or not. Logs an error
- * if inappropriate type.
- *
- * @param obj json value to parse
- * @param val destination value to be populated
- * @return whether successful or not
- */
-bool fromJsonValue(const JsonGenericValue& obj, Magnum::Vector2& val);
-
-/**
- * @brief Specialization to handle Magnum::Vector2i values. Parses passed value
- * into JsonGenericValue.
- *
- * @param vec Source Magnum::Vector2 to parse into Json
- * @param allocator
- * @return Json value containing data
- */
-JsonGenericValue toJsonValue(const Magnum::Vector2i& vec,
-                             JsonAllocator& allocator);
-/**
- * @brief Specialization to handle Magnum::Vector2i values. Populate passed @p
- * val with value. Returns whether successfully populated, or not. Logs an error
- * if inappropriate type.
- *
- * @param obj json value to parse
- * @param val destination value to be populated
- * @return whether successful or not
- */
-bool fromJsonValue(const JsonGenericValue& obj, Magnum::Vector2i& val);
-
-/**
- * @brief Specialization to handle Magnum::Vector3 values. Parses passed value
- * into JsonGenericValue.
- *
- * @param vec Source Magnum::Vector3 to parse into Json
- * @param allocator
- * @return Json value containing data
- */
-JsonGenericValue toJsonValue(const Magnum::Vector3& vec,
-                             JsonAllocator& allocator);
 /**
  * @brief Specialization to handle Magnum::Vector3 values. Populate passed @p
  * val with value. Returns whether successfully populated, or not. Logs an error
@@ -125,40 +35,31 @@ JsonGenericValue toJsonValue(const Magnum::Vector3& vec,
  * @param val destination value to be populated
  * @return whether successful or not
  */
-bool fromJsonValue(const JsonGenericValue& obj, Magnum::Vector3& val);
+inline bool fromJsonValue(const JsonGenericValue& obj, Magnum::Vector3& val) {
+  if (obj.IsArray() && obj.Size() == 3) {
+    for (rapidjson::SizeType i = 0; i < 3; ++i) {
+      if (obj[i].IsNumber()) {
+        val[i] = obj[i].GetDouble();
+      } else {
+        LOG(ERROR) << " Invalid numeric value specified in JSON Vec3, index :"
+                   << i;
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
 
-/**
- * @brief Specialization to handle Magnum::Vector4 values. Parses passed value
- * into JsonGenericValue.
- *
- * @param vec Source Magnum::Vector4 to parse into Json
- * @param allocator
- * @return Json value containing data
- */
-JsonGenericValue toJsonValue(const Magnum::Vector4& vec,
-                             JsonAllocator& allocator);
-/**
- * @brief Specialization to handle Magnum::Vector4 values. Populate passed @p
- * val with value. Returns whether successfully populated, or not. Logs an error
- * if inappropriate type.
- *
- * @param obj json value to parse
- * @param val destination value to be populated
- * @return whether successful or not
- */
-bool fromJsonValue(const JsonGenericValue& obj, Magnum::Vector4& val);
-
-/**
- * @brief Specialization to handle Magnum::Quaternion values. Parses passed
- * value into JsonGenericValue.
- *
- * @param quat Source Magnum::Quaternion to parse into Json
- * @param allocator
- * @return Json value containing data
- */
-
-JsonGenericValue toJsonValue(const Magnum::Quaternion& quat,
-                             JsonAllocator& allocator);
+inline JsonGenericValue toJsonValue(const Magnum::Quaternion& quat,
+                                    JsonAllocator& allocator) {
+  JsonGenericValue arr(rapidjson::kArrayType);
+  arr.PushBack(quat.scalar(), allocator);
+  for (int i = 0; i < 3; i++) {
+    arr.PushBack(quat.vector()[i], allocator);
+  }
+  return arr;
+}
 
 /**
  * @brief Specialization to handle Magnum::Quaternion values. Populate passed @p
@@ -169,7 +70,27 @@ JsonGenericValue toJsonValue(const Magnum::Quaternion& quat,
  * @param val destination value to be populated
  * @return whether successful or not
  */
-bool fromJsonValue(const JsonGenericValue& obj, Magnum::Quaternion& val);
+inline bool fromJsonValue(const JsonGenericValue& obj,
+                          Magnum::Quaternion& val) {
+  if (obj.IsArray() && obj.Size() == 4) {
+    for (rapidjson::SizeType i = 0; i < 4; ++i) {
+      if (obj[i].IsNumber()) {
+        if (i == 0) {
+          val.scalar() = obj[0].GetFloat();
+        } else {
+          val.vector()[i - 1] = obj[i].GetFloat();
+        }
+      } else {
+        LOG(ERROR)
+            << " Invalid numeric value specified in JSON Quaternion, index :"
+            << i;
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
 
 // Containers::Optional is handled differently than ordinary structs. Instead of
 // offering toJsonValue/fromJsonValue, we offer addMember/readMember, which
@@ -189,8 +110,7 @@ template <typename T>
 bool readMember(const rapidjson::Value& value,
                 const char* name,
                 Corrade::Containers::Optional<T>& x) {
-  JsonGenericValue::ConstMemberIterator jsonIter = value.FindMember(name);
-  if (jsonIter != value.MemberEnd()) {
+  if (value.HasMember(name)) {
     x = T();
     return readMember(value, name, *x);
   } else {
@@ -212,7 +132,7 @@ inline bool fromJsonValue(const JsonGenericValue& obj, Magnum::Rad& val) {
     val = Magnum::Rad{obj.GetFloat()};
     return true;
   }
-  ESP_ERROR() << "Invalid double value";
+  LOG(ERROR) << "Invalid double value";
   return true;
 }
 

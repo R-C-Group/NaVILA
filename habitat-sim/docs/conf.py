@@ -1,4 +1,4 @@
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
+# Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
@@ -9,35 +9,20 @@ import sys
 
 # TODO make this less brittle
 sys.path = [
-    os.path.join(os.path.dirname(__file__), "..", "src_python"),
+    os.path.join(os.path.dirname(__file__), "../"),
     # os.path.join(os.path.dirname(__file__), '../build-bundledmagnum/src/deps/magnum-bindings/src/python/')
 ] + sys.path
 
 
-import habitat_sim
+import habitat_sim  # NOQA
 
 # TODO: remove once m.css handles class hierarchies better
-habitat_sim.logging.HabitatSimFormatter.formatStack.__doc__ = ""
+habitat_sim.logging.GlogFormatter.formatStack.__doc__ = ""
 # Monkey patch the registry to be the _Registry class instead of the singleton for docs
 habitat_sim.registry = type(habitat_sim.registry)
 # TODO: remove once utils/__init__.py is removed again
-habitat_sim.utils.common.__all__ = [
-    x
-    for x in habitat_sim.utils.common.__all__
-    if x
-    not in [
-        "quat_from_coeffs",
-        "quat_to_coeffs",
-        "quat_from_magnum",
-        "quat_to_magnum",
-        "quat_from_angle_axis",
-        "quat_to_angle_axis",
-        "quat_rotate_vector",
-        "quat_from_two_vectors",
-    ]
-]
-# habitat_sim.utils.__all__.remove("quat_from_angle_axis")
-# habitat_sim.utils.__all__.remove("quat_rotate_vector")
+habitat_sim.utils.__all__.remove("quat_from_angle_axis")
+habitat_sim.utils.__all__.remove("quat_rotate_vector")
 
 PROJECT_TITLE = "Habitat"
 PROJECT_SUBTITLE = "Sim Docs"
@@ -52,10 +37,8 @@ INPUT_PAGES = [
     "pages/attributesJSON.rst",
     "pages/stereo-agent.rst",
     "pages/lighting-setups.rst",
-    "pages/asset-viewer-tutorial.rst",
-    "pages/managed-rigid-object-tutorial.rst",
-    "pages/logging.rst",
-    "pages/coordinate-frame-tutorial.rst",
+    "pages/image-extractor.rst",
+    "pages/rigid-object-tutorial.rst",
 ]
 
 PLUGINS = [
@@ -94,9 +77,8 @@ LINKS_NAVBAR1 = [
             ("Attributes JSON", "attributesJSON"),
             ("Stereo agent", "stereo-agent"),
             ("Lighting Setups", "lighting-setups"),
-            ("View Assets in Habitat-sim", "asset-viewer-tutorial"),
-            ("Managed Rigid Object Tutorial", "managed-rigid-object-tutorial"),
-            ("Coordinate Frame Tutorial", "coordinate-frame-tutorial"),
+            ("Image extraction", "image-extractor"),
+            ("Rigid Object Tutorial", "rigid-object-tutorial"),
         ],
     ),
     ("Classes", "classes", []),
@@ -110,8 +92,7 @@ LINKS_NAVBAR2 = [
 ]
 
 FINE_PRINT = f"""
-| {PROJECT_TITLE} {PROJECT_SUBTITLE}. Copyright © 2021 Facebook AI Research.
-| `Terms of Use </terms-of-use>`_ `Data Policy </data-policy>`_ `Cookie Policy </cookie-policy>`_
+| {PROJECT_TITLE} {PROJECT_SUBTITLE}. Copyright © 2020 Facebook AI Research.
 | Created with `m.css Python doc generator <https://mcss.mosra.cz/documentation/python/>`_."""
 THEME_COLOR = "#478cc3"
 STYLESHEETS = [

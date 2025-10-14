@@ -1,8 +1,8 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "esp/bindings/Bindings.h"
+#include "esp/bindings/bindings.h"
 
 #include <Magnum/ImageView.h>
 #include <Magnum/Magnum.h>
@@ -11,57 +11,20 @@
 #include <Magnum/PythonBindings.h>
 #include <Magnum/SceneGraph/PythonBindings.h>
 
+#include "esp/gfx/RenderCamera.h"
 #include "esp/gfx/Renderer.h"
 #include "esp/gfx/replay/ReplayManager.h"
-#include "esp/metadata/MetadataMediator.h"
-#include "esp/physics/objectManagers/ArticulatedObjectManager.h"
-#include "esp/physics/objectManagers/RigidObjectManager.h"
 #include "esp/scene/SemanticScene.h"
-#include "esp/sim/AbstractReplayRenderer.h"
-#include "esp/sim/BatchReplayRenderer.h"
-#include "esp/sim/ClassicReplayRenderer.h"
-#include "esp/sim/RenderInstanceHelper.h"
 #include "esp/sim/Simulator.h"
 #include "esp/sim/SimulatorConfiguration.h"
 
 namespace py = pybind11;
 using py::literals::operator""_a;
 
-namespace {
-
-#if PYBIND11_VERSION_MAJOR > 2 || \
-    (PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR >= 12)
-// Use is_contiguous() for pybind11 >= 2.12.0
-bool is_contiguous(const py::array_t<float>& array) {
-  return array.is_contiguous();
-}
-#else
-// Manual stride check for pybind11 < 2.12.0
-bool is_contiguous(const py::array_t<float>& array) {
-  py::buffer_info info = array.request();
-  const auto& shape = info.shape;
-  const auto& strides = info.strides;
-
-  // Check if array is C-contiguous
-  size_t ndim = shape.size();
-  size_t expected_stride = sizeof(float);
-
-  for (size_t i = ndim; i > 0; --i) {
-    if (strides[i - 1] != expected_stride) {
-      return false;
-    }
-    expected_stride *= shape[i - 1];
-  }
-  return true;
-}
-#endif
-
-}  // namespace
-
 namespace esp {
 namespace sim {
 
-void initSimConfigBindings(py::module& m) {
+void initSimBindings(py::module& m) {
   // ==== SimulatorConfiguration ====
   py::class_<SimulatorConfiguration, SimulatorConfiguration::ptr>(
       m, "SimulatorConfiguration")
@@ -75,167 +38,43 @@ void initSimConfigBindings(py::module& m) {
           "scene_id", &SimulatorConfiguration::activeSceneName,
           R"(Either the name of a stage asset or configuration file, or else the name of a scene
           instance configuration, used to initialize the simulator world.)")
-      .def_readwrite(
-          "random_seed", &SimulatorConfiguration::randomSeed,
-          R"(The Simulator and Pathfinder random seed. Set during scene initialization.)")
-      .def_readwrite(
-          "default_agent_id", &SimulatorConfiguration::defaultAgentId,
-          R"(The default agent id used during initialization and functionally whenever alternative agent ids are not provided.)")
-      .def_readwrite("gpu_device_id", &SimulatorConfiguration::gpuDeviceId,
-                     R"(The system GPU device to use for rendering.)")
-      .def_readwrite(
-          "allow_sliding", &SimulatorConfiguration::allowSliding,
-          R"(Whether or not the agent can slide on NavMesh collisions.)")
-      .def_readwrite(
-          "create_renderer", &SimulatorConfiguration::createRenderer,
-          R"(Optimization for non-visual simulation. If false, no renderer will be created and no materials or textures loaded.)")
-      .def_readwrite(
-          "leave_context_with_background_renderer",
-          &SimulatorConfiguration::leaveContextWithBackgroundRenderer,
-          R"(See tutorials/async_rendering.py)")
-      .def_readwrite("frustum_culling", &SimulatorConfiguration::frustumCulling,
-                     R"(Enable or disable the frustum culling optimization.)")
-      .def_readwrite(
-          "enable_physics", &SimulatorConfiguration::enablePhysics,
-          R"(Specifies whether or not dynamics is supported by the simulation if a suitable library (i.e. Bullet) has been installed. Install with --bullet to enable.)")
-      .def_readwrite(
-          "use_semantic_textures",
-          &SimulatorConfiguration::useSemanticTexturesIfFound,
-          R"(If the loaded scene/dataset supports semantically annotated textures, use these for
-      semantic rendering. Defaults to True)")
+      .def_readwrite("random_seed", &SimulatorConfiguration::randomSeed)
+      .def_readwrite("default_agent_id",
+                     &SimulatorConfiguration::defaultAgentId)
+      .def_readwrite("default_camera_uuid",
+                     &SimulatorConfiguration::defaultCameraUuid)
+      .def_readwrite("gpu_device_id", &SimulatorConfiguration::gpuDeviceId)
+      .def_readwrite("allow_sliding", &SimulatorConfiguration::allowSliding)
+      .def_readwrite("create_renderer", &SimulatorConfiguration::createRenderer)
+      .def_readwrite("frustum_culling", &SimulatorConfiguration::frustumCulling)
+      .def_readwrite("enable_physics", &SimulatorConfiguration::enablePhysics)
       .def_readwrite(
           "enable_gfx_replay_save",
           &SimulatorConfiguration::enableGfxReplaySave,
           R"(Enable replay recording. See sim.gfx_replay.save_keyframe.)")
       .def_readwrite("physics_config_file",
-                     &SimulatorConfiguration::physicsConfigFile,
-                     R"(Path to the physics parameter config file.)")
+                     &SimulatorConfiguration::physicsConfigFile)
       .def_readwrite(
-          "override_scene_light_defaults",
+          "override_scene_ligh_defaults",
           &SimulatorConfiguration::overrideSceneLightDefaults,
-          R"(Override scene lighting setup to use with value specified by `scene_light_setup`.)")
+          R"(Override scene lighting setup to use with value specified below.)")
       .def_readwrite("scene_light_setup",
-                     &SimulatorConfiguration::sceneLightSetupKey,
-                     R"(Light setup key for the scene.)")
+                     &SimulatorConfiguration::sceneLightSetup)
       .def_readwrite("load_semantic_mesh",
-                     &SimulatorConfiguration::loadSemanticMesh,
-                     R"(Whether or not to load the semantic mesh.)")
+                     &SimulatorConfiguration::loadSemanticMesh)
       .def_readwrite(
           "force_separate_semantic_scene_graph",
           &SimulatorConfiguration::forceSeparateSemanticSceneGraph,
           R"(Required to support playback of any gfx replay that includes a
           stage with a semantic mesh. Set to false otherwise.)")
-      .def_readwrite(
-          "requires_textures", &SimulatorConfiguration::requiresTextures,
-          R"(Whether or not to load textures for the meshes. This MUST be true for RGB rendering.)")
-      .def_readwrite(
-          "navmesh_settings", &SimulatorConfiguration::navMeshSettings,
-          R"(Optionally provide a pre-configured NavMeshSettings. If provided, the NavMesh will be recomputed with the provided settings if: A. no NavMesh was loaded, or B. the loaded NavMesh's settings differ from the configured settings. If not provided, no NavMesh recompute will be done automatically.)")
-      .def_readwrite(
-          "enable_hbao", &SimulatorConfiguration::enableHBAO,
-          R"(Whether or not to enable horizon-based ambient occlusion, which provides soft shadows in corners and crevices.)")
+      .def_readwrite("requires_textures",
+                     &SimulatorConfiguration::requiresTextures)
       .def(py::self == py::self)
       .def(py::self != py::self);
 
-  // ==== ReplayRendererConfiguration ====
-  py::class_<ReplayRendererConfiguration, ReplayRendererConfiguration::ptr>(
-      m, "ReplayRendererConfiguration")
-      .def(py::init(&ReplayRendererConfiguration::create<>))
-      .def_readwrite("num_environments",
-                     &ReplayRendererConfiguration::numEnvironments,
-                     R"(Number of concurrent environments to render.)")
-      .def_readwrite(
-          "standalone", &ReplayRendererConfiguration::standalone,
-          R"(Determines if the renderer is standalone (windowless) or not (embedded in another window).)")
-      .def_readwrite(
-          "sensor_specifications",
-          &ReplayRendererConfiguration::sensorSpecifications,
-          R"(List of sensor specifications for one simulator. For batch rendering, all simulators must have the same specification.)")
-      .def_readwrite("gpu_device_id", &ReplayRendererConfiguration::gpuDeviceId,
-                     R"(The system GPU device to use for rendering)")
-      .def_readwrite("enable_frustum_culling",
-                     &ReplayRendererConfiguration::enableFrustumCulling,
-                     R"(Controls whether frustum culling is enabled.)")
-      .def_readwrite(
-          "enable_hbao", &ReplayRendererConfiguration::enableHBAO,
-          R"(Controls whether horizon-based ambient occlusion is enabled.)")
-      .def_readwrite(
-          "force_separate_semantic_scene_graph",
-          &ReplayRendererConfiguration::forceSeparateSemanticSceneGraph,
-          R"(Required to support playback of any gfx replay that includes a
-          stage with a semantic mesh. Set to false otherwise.)")
-      .def_readwrite(
-          "leave_context_with_background_renderer",
-          &ReplayRendererConfiguration::leaveContextWithBackgroundRenderer,
-          R"(See See tutorials/async_rendering.py.)");
-}
-
-void initRenderInstanceHelperBindings(py::module& m) {
-  py::class_<RenderInstanceHelper, RenderInstanceHelper::ptr>(
-      m, "RenderInstanceHelper")
-      .def(py::init<sim::Simulator&, bool>(), py::arg("sim"),
-           py::arg("use_xyzw_orientations"),
-           "R(Construct RenderInstanceHelper. This class helps you populate a "
-           "Habitat-sim visual scene. Use use_xyzw_orientations to specify the "
-           "format of the quaternions you'll pass to set_world_poses later. If "
-           "use_xyzw_orientations=False, we assume wxyz.)")
-      .def("add_instance", &RenderInstanceHelper::AddInstance,
-           py::arg("asset_filepath"), py::arg("semantic_id"),
-           py::arg("scale") = Mn::Vector3(1.0, 1.0, 1.0),
-           "R(Add an instance of a render asset to the scene. The asset can be "
-           "for example a .glb or .obj 3D model file. The instance gets an "
-           "identity pose; change it later using set_world_poses.)")
-      .def("clear_all_instances", &RenderInstanceHelper::ClearAllInstances,
-           "R(Remove all instances from the scene.)")
-      .def("get_num_instances", &RenderInstanceHelper::GetNumInstances,
-           "R(Get the number of instances you've added.)")
-      .def(
-          "set_world_poses",
-          [](RenderInstanceHelper& self, py::array_t<float> positions,
-             py::array_t<float> orientations) {
-            // Get the number of instances from the helper
-            size_t num_instances = self.GetNumInstances();
-
-            // Validate the shape of positions
-            if (positions.ndim() != 2 || positions.shape(0) != num_instances ||
-                positions.shape(1) != 3) {
-              throw std::runtime_error(
-                  "positions must be a 2D array of shape (num_instances, 3).");
-            }
-
-            // Validate the shape of orientations
-            if (orientations.ndim() != 2 ||
-                orientations.shape(0) != num_instances ||
-                orientations.shape(1) != 4) {
-              throw std::runtime_error(
-                  "orientations must be a 2D array of shape (num_instances, "
-                  "4).");
-            }
-
-            if (!is_contiguous(positions) || !is_contiguous(orientations)) {
-              throw std::runtime_error(
-                  "positions and orientations must be contiguous. See "
-                  "np.ascontiguousarray.");
-            }
-
-            // Pass raw pointers to the C++ function
-            self.SetWorldPoses(static_cast<float*>(positions.request().ptr),
-                               positions.size(),
-                               static_cast<float*>(orientations.request().ptr),
-                               orientations.size());
-          },
-          py::arg("positions"), py::arg("orientations"),
-          "R(Set the world poses of all your instances. See the index returned "
-          "by AddInstance. See also use_xyzw_orientations in the "
-          "RenderAssetInstance constructor.)");
-}
-
-void initSimBindings(py::module& m) {
   // ==== Simulator ====
   py::class_<Simulator, Simulator::ptr>(m, "Simulator")
-      // modify constructor to pass MetadataMediator
-      .def(py::init<const SimulatorConfiguration&,
-                    esp::metadata::MetadataMediator::ptr>())
+      .def(py::init<const SimulatorConfiguration&>())
       .def("get_active_scene_graph", &Simulator::getActiveSceneGraph,
            R"(PYTHON DOES NOT GET OWNERSHIP)",
            py::return_value_policy::reference)
@@ -256,13 +95,8 @@ void initSimBindings(py::module& m) {
           R"(Use gfx_replay_manager for replay recording and playback.)")
       .def("seed", &Simulator::seed, "new_seed"_a)
       .def("reconfigure", &Simulator::reconfigure, "configuration"_a)
-      .def("reset", [](Simulator& self) { self.reset(false); })
-      .def(
-          "close", &Simulator::close, "destroy"_a = true,
-          R"(Free all loaded assets and GPU contexts. Use destroy=true except where noted in tutorials/async_rendering.py.)")
-      .def(
-          "physics_debug_draw", &Simulator::physicsDebugDraw, "projMat"_a,
-          R"(Render any debugging visualizations provided by the underlying physics simulator implementation given the composed projection and transformation matrix for the render camera.)")
+      .def("reset", &Simulator::reset)
+      .def("close", &Simulator::close)
       .def_property("pathfinder", &Simulator::getPathFinder,
                     &Simulator::setPathFinder)
       .def_property(
@@ -271,16 +105,6 @@ void initSimBindings(py::module& m) {
           R"(Enable or disable wireframe visualization of current pathfinder's NavMesh.)")
       .def_property_readonly("gpu_device", &Simulator::gpuDevice)
       .def_property_readonly("random", &Simulator::random)
-      .def_property_readonly(
-          "curr_scene_name", &Simulator::getCurSceneInstanceName,
-          R"(The simplified, but unique, name of the currently loaded scene.)")
-      .def_property_readonly(
-          "scene_aabb", &Simulator::getSceneAabb,
-          R"(Get the axis-aligned bounding box (AABB) of the scene in global space.)")
-      .def_property_readonly(
-          "semantic_color_map", &Simulator::getSemanticSceneColormap,
-          R"(The list of semantic colors being used for semantic rendering. The index
-            in the list corresponds to the semantic ID.)")
       .def_property("frustum_culling", &Simulator::isFrustumCullingEnabled,
                     &Simulator::setFrustumCullingEnabled,
                     R"(Enable or disable the frustum culling)")
@@ -289,14 +113,8 @@ void initSimBindings(py::module& m) {
           &Simulator::setActiveSceneDatasetName,
           R"(The currently active dataset being used.  Will attempt to load
             configuration files specified if does not already exist.)")
+      /* --- Physics functions --- */
       /* --- Template Manager accessors --- */
-      // We wish a copy of the metadata mediator smart pointer so that we
-      // increment its ref counter
-      .def_property(
-          "metadata_mediator", &Simulator::getMetadataMediator,
-          &Simulator::setMetadataMediator, py::return_value_policy::copy,
-          R"(This construct manages all configuration template managers
-          and the Scene Dataset Configurations)")
       .def("get_asset_template_manager", &Simulator::getAssetAttributesManager,
            pybind11::return_value_policy::reference,
            R"(Get the current dataset's AssetAttributesManager instance
@@ -320,249 +138,181 @@ void initSimBindings(py::module& m) {
            pybind11::return_value_policy::reference,
            R"(Get the current dataset's StageAttributesManager instance
             for configuring simulation stage templates.)")
-      .def("get_rigid_object_manager", &Simulator::getRigidObjectManager,
-           pybind11::return_value_policy::reference,
-           R"(Get the manager responsible for organizing and accessing all the
-           currently constructed rigid objects.)")
-      .def("get_articulated_object_manager",
-           &Simulator::getArticulatedObjectManager,
-           pybind11::return_value_policy::reference,
-           R"(Get the manager responsible for organizing and accessing all the
-          currently constructed articulated objects.)")
       .def(
           "get_physics_simulation_library",
           &Simulator::getPhysicsSimulationLibrary,
           R"(Query the physics library implementation currently configured by this Simulator instance.)")
+      /* --- Object instancing and access --- */
+      .def(
+          "add_object", &Simulator::addObject, "object_lib_id"_a,
+          "attachment_node"_a = nullptr,
+          "light_setup_key"_a = DEFAULT_LIGHTING_KEY, "scene_id"_a = 0,
+          R"(Instance an object into the scene via a template referenced by library id. Optionally attach the object to an existing SceneNode and assign its initial LightSetup key.)")
+      .def(
+          "add_object_by_handle", &Simulator::addObjectByHandle,
+          "object_lib_handle"_a, "attachment_node"_a = nullptr,
+          "light_setup_key"_a = DEFAULT_LIGHTING_KEY, "scene_id"_a = 0,
+          R"(Instance an object into the scene via a template referenced by its handle. Optionally attach the object to an existing SceneNode and assign its initial LightSetup key.)")
+      .def("remove_object", &Simulator::removeObject, "object_id"_a,
+           "delete_object_node"_a = true, "delete_visual_node"_a = true,
+           "scene_id"_a = 0, R"(
+        Remove an object instance from the scene. Optionally leave its root SceneNode and visual SceneNode on the SceneGraph.
+
+        .. note-warning::
+
+            Removing an object which was attached to the SceneNode
+            of an Agent expected to continue producing observations
+            will likely result in errors if delete_object_node is true.
+            )")
+      .def(
+          "get_object_initialization_template",
+          &Simulator::getObjectInitializationTemplate, "object_id"_a,
+          "scene_id"_a = 0,
+          R"(Get a copy of the ObjectAttributes template used to instance an object.)")
       .def(
           "get_stage_initialization_template",
-          &Simulator::getStageInitializationTemplate,
+          &Simulator::getStageInitializationTemplate, "scene_id"_a = 0,
           R"(Get a copy of the StageAttributes template used to instance a scene's stage or None if it does not exist.)")
-
+      .def("get_object_motion_type", &Simulator::getObjectMotionType,
+           "object_id"_a, "scene_id"_a = 0,
+           R"(Get the MotionType of an object.)")
+      .def("set_object_motion_type", &Simulator::setObjectMotionType,
+           "motion_type"_a, "object_id"_a, "scene_id"_a = 0,
+           R"(Set the MotionType of an object.)")
       .def(
-          "build_semantic_CC_objects", &Simulator::buildSemanticCCObjects,
-          R"(Get a dictionary of the current semantic scene's connected components keyed by color or id,
-          where each value is a list of Semantic Objects corresponding to an individual connected component.)")
-      .def(
-          "build_vertex_color_map_report",
-          &Simulator::buildVertexColorMapReport,
-          R"(Get a list of strings describing first each color found on vertices in the semantic mesh that is
-          not present in the loaded semantic scene descriptor file, and then a list of each semantic object
-          whose specified color is not found on any vertex in the mesh.)")
+          "get_existing_object_ids", &Simulator::getExistingObjectIDs,
+          "scene_id"_a = 0,
+          R"(Get the list of ids for all objects currently instanced in the scene.)")
 
       /* --- Kinematics and dynamics --- */
       .def(
           "step_world", &Simulator::stepWorld, "dt"_a = 1.0 / 60.0,
           R"(Step the physics simulation by a desired timestep (dt). Note that resulting world time after step may not be exactly t+dt. Use get_world_time to query current simulation time.)")
       .def("get_world_time", &Simulator::getWorldTime,
-           R"(Query the current simulation world time.)")
-      .def("get_physics_time_step", &Simulator::getPhysicsTimeStep,
-           R"(Get the last used physics timestep)")
-      .def("get_gravity", &Simulator::getGravity,
-           R"(Query the gravity vector for the scene.)")
-      .def("set_gravity", &Simulator::setGravity, "gravity"_a,
-           R"(Set the gravity vector for the scene.)")
-
+           R"(Query the current simualtion world time.)")
+      .def("get_gravity", &Simulator::getGravity, "scene_id"_a = 0,
+           R"(Query the gravity vector for a scene.)")
+      .def("set_gravity", &Simulator::setGravity, "gravity"_a, "scene_id"_a = 0,
+           R"(Set the gravity vector for a scene.)")
+      .def(
+          "get_object_scene_node", &Simulator::getObjectSceneNode,
+          "object_id"_a, "scene_id"_a = 0,
+          R"(Get a reference to the root SceneNode of an object's SceneGraph subtree.)")
+      .def(
+          "get_object_visual_scene_nodes",
+          &Simulator::getObjectVisualSceneNodes, "object_id"_a,
+          "scene_id"_a = 0,
+          R"(Get a list of references to the SceneNodes with an object's render assets attached. Use this to manipulate the visual state of an object. Changes to these nodes will not affect physics simulation.)")
+      .def(
+          "set_transformation", &Simulator::setTransformation, "transform"_a,
+          "object_id"_a, "scene_id"_a = 0,
+          R"(Set the transformation matrix of an object's root SceneNode and update its simulation state.)")
+      .def("get_transformation", &Simulator::getTransformation, "object_id"_a,
+           "scene_id"_a = 0,
+           R"(Get the transformation matrix of an object's root SceneNode.)")
+      .def(
+          "set_rigid_state", &Simulator::setRigidState, "rigid_state"_a,
+          "object_id"_a, "scene_id"_a = 0,
+          R"(Set the transformation of an object from a RigidState and update its simulation state.)")
+      .def(
+          "get_rigid_state", &Simulator::getRigidState, "object_id"_a,
+          "scene_id"_a = 0,
+          R"(Get an object's transformation as a RigidState (i.e. vector, quaternion).)")
+      .def("set_translation", &Simulator::setTranslation, "translation"_a,
+           "object_id"_a, "scene_id"_a = 0,
+           R"(Set an object's translation and update its simulation state.)")
+      .def("get_translation", &Simulator::getTranslation, "object_id"_a,
+           "scene_id"_a = 0, R"(Get an object's translation.)")
+      .def("set_rotation", &Simulator::setRotation, "rotation"_a, "object_id"_a,
+           "scene_id"_a = 0,
+           R"(Set an object's orientation and update its simulation state.)")
+      .def("get_rotation", &Simulator::getRotation, "object_id"_a,
+           "scene_id"_a = 0, R"(Get an object's orientation.)")
+      .def(
+          "get_object_velocity_control", &Simulator::getObjectVelocityControl,
+          "object_id"_a, "scene_id"_a = 0,
+          R"(Get a reference to an object's VelocityControl struct. Use this to set constant control velocities for MotionType::KINEMATIC and MotionType::DYNAMIC objects.)")
+      .def(
+          "set_linear_velocity", &Simulator::setLinearVelocity, "linVel"_a,
+          "object_id"_a, "scene_id"_a = 0,
+          R"(Set the linear component of an object's velocity. Only applies to MotionType::DYNAMIC objects.)")
+      .def(
+          "get_linear_velocity", &Simulator::getLinearVelocity, "object_id"_a,
+          "scene_id"_a = 0,
+          R"(Get the linear component of an object's velocity. Only non-zero for MotionType::DYNAMIC objects.)")
+      .def(
+          "set_angular_velocity", &Simulator::setAngularVelocity, "angVel"_a,
+          "object_id"_a, "scene_id"_a = 0,
+          R"(Set the angular component of an object's velocity. Only applies to MotionType::DYNAMIC objects.)")
+      .def(
+          "get_angular_velocity", &Simulator::getAngularVelocity, "object_id"_a,
+          "scene_id"_a = 0,
+          R"(Get the angular component of an object's velocity. Only non-zero for MotionType::DYNAMIC objects.)")
+      .def(
+          "apply_force", &Simulator::applyForce, "force"_a,
+          "relative_position"_a, "object_id"_a, "scene_id"_a = 0,
+          R"(Apply an external force to an object at a specific point relative to the object's center of mass in global coordinates. Only applies to MotionType::DYNAMIC objects.)")
+      .def(
+          "apply_torque", &Simulator::applyTorque, "torque"_a, "object_id"_a,
+          "scene_id"_a = 0,
+          R"(Apply torque to an object. Only applies to MotionType::DYNAMIC objects.)")
+      .def("get_object_is_collidable", &Simulator::getObjectIsCollidable,
+           "object_id"_a, R"(Get whether or not an object is collidable.)")
+      .def("set_object_is_collidable", &Simulator::setObjectIsCollidable,
+           "collidable"_a, "object_id"_a,
+           R"(Set whether or not an object is collidable.)")
       .def("get_stage_is_collidable", &Simulator::getStageIsCollidable,
            R"(Get whether or not the static stage is collidable.)")
       .def("set_stage_is_collidable", &Simulator::setStageIsCollidable,
            "collidable"_a,
            R"(Set whether or not the static stage is collidable.)")
       .def(
-          "get_physics_num_active_contact_points",
-          &Simulator::getPhysicsNumActiveContactPoints,
-          R"(The number of contact points that were active during the last step. An object resting on another object will involve several active contact points. Once both objects are asleep, the contact points are inactive. This count is a proxy for complexity/cost of collision-handling in the current scene.)")
-      .def(
-          "get_physics_num_active_overlapping_pairs",
-          &Simulator::getPhysicsNumActiveOverlappingPairs,
-          R"(The number of active overlapping pairs during the last step. When object bounding boxes overlap and either object is active, additional "narrowphase" collision-detection must be run. This count is a proxy for complexity/cost of collision-handling in the current scene.)")
-      .def(
-          "get_physics_step_collision_summary",
-          &Simulator::getPhysicsStepCollisionSummary,
-          R"(Get a summary of collision-processing from the last physics step.)")
-      .def("get_physics_contact_points", &Simulator::getPhysicsContactPoints,
-           R"(Return a list of ContactPointData "
-          "objects describing the contacts from the most recent physics substep.)")
-      .def(
-          "perform_discrete_collision_detection",
-          &Simulator::performDiscreteCollisionDetection,
-          R"(Perform discrete collision detection for the scene. Physics must be enabled. Warning: may break simulation determinism.)")
+          "contact_test", &Simulator::contactTest, "object_id"_a,
+          "scene_id"_a = 0,
+          R"(Run collision detection and return a binary indicator of penetration between the specified object and any other collision object. Physics must be enabled.)")
       .def(
           "cast_ray", &Simulator::castRay, "ray"_a, "max_distance"_a = 100.0,
-          "buffer_distance"_a = 0.08,
+          "scene_id"_a = 0,
           R"(Cast a ray into the collidable scene and return hit results. Physics must be enabled. max_distance in units of ray length.)")
+      .def("set_object_bb_draw", &Simulator::setObjectBBDraw, "draw_bb"_a,
+           "object_id"_a, "scene_id"_a = 0,
+           R"(Enable or disable bounding box visualization for an object.)")
+      .def(
+          "set_object_semantic_id", &Simulator::setObjectSemanticId,
+          "semantic_id"_a, "object_id"_a, "scene_id"_a = 0,
+          R"(Convenience function to set the semanticId for all visual SceneNodes belonging to an object.)")
       .def(
           "recompute_navmesh", &Simulator::recomputeNavMesh, "pathfinder"_a,
-          "navmesh_settings"_a,
-          R"(Recompute the NavMesh for a given PathFinder instance using configured NavMeshSettings.)")
-      .def(
-          "add_trajectory_object",
-          [](Simulator& self, const std::string& name,
-             const std::vector<Mn::Vector3>& pts, int numSegments, float radius,
-             const Magnum::Color4& color, bool smooth, int numInterps) {
-            return self.addTrajectoryObject(
-                name, pts, {Mn::Color3(color.rgb())}, numSegments, radius,
-                smooth, numInterps);
-          },
-          "traj_vis_name"_a, "points"_a, "num_segments"_a = 3,
-          "radius"_a = .001, "color"_a = Mn::Color4{0.9, 0.1, 0.1, 1.0},
-          "smooth"_a = false, "num_interpolations"_a = 10,
-          R"(Build a tube visualization around the passed trajectory of points.
+          "navmesh_settings"_a, "include_static_objects"_a = false,
+          R"(Recompute the NavMesh for a given PathFinder instance using configured NavMeshSettings. Optionally include all MotionType::STATIC objects in the navigability constraints.)")
+      .def("add_trajectory_object", &Simulator::addTrajectoryObject,
+           "traj_vis_name"_a, "points"_a, "num_segments"_a = 3,
+           "radius"_a = .001, "color"_a = Mn::Color4{0.9, 0.1, 0.1, 1.0},
+           "smooth"_a = false, "num_interpolations"_a = 10,
+           R"(Build a tube visualization around the passed trajectory of points.
               points : (list of 3-tuples of floats) key point locations to use to create trajectory tube.
               num_segments : (Integer) the number of segments around the tube to be used to make the visualization.
               radius : (Float) the radius of the resultant tube.
               color : (4-tuple of float) the color of the trajectory tube.
               smooth : (Bool) whether or not to smooth trajectory using a Catmull-Rom spline interpolating spline.
               num_interpolations : (Integer) the number of interpolation points to find between successive key points.)")
-      .def("add_gradient_trajectory_object",
-           static_cast<int (Simulator::*)(
-               const std::string&, const std::vector<Mn::Vector3>&,
-               const std::vector<Mn::Color3>&, int, float, bool, int)>(
-               &Simulator::addTrajectoryObject),
-           "traj_vis_name"_a, "points"_a, "colors"_a, "num_segments"_a = 3,
-           "radius"_a = .001, "smooth"_a = false, "num_interpolations"_a = 10,
-           R"(Build a tube visualization around the passed trajectory of
-          points, using the passed colors to build a gradient along the length of the tube.
-              points : (list of 3-tuples of floats) key point locations to
-              use to create trajectory tube. num_segments : (Integer) the
-              number of segments around the tube to be used to make the
-              visualization. radius : (Float) the radius of the resultant
-              tube. colors : (List of 3-tuple of byte) the colors to build
-              the gradient along the length of the trajectory tube. smooth :
-              (Bool) whether or not to smooth trajectory using a Catmull-Rom
-              spline interpolating spline. num_interpolations : (Integer) the
-              number of interpolation points to find between successive key
-              points.)")
-      .def(
-          "save_current_scene_config",
-          static_cast<bool (Simulator::*)(const std::string&) const>(
-              &Simulator::saveCurrentSceneInstance),
-          R"(Save the current simulation world's state as a Scene Instance Config JSON
-          using the passed name. This can be used to reload the stage, objects, articulated
-          objects and other values as they currently are.)",
-          "file_name"_a)
-      .def(
-          "save_current_scene_config",
-          static_cast<bool (Simulator::*)(bool) const>(
-              &Simulator::saveCurrentSceneInstance),
-          R"(Save the current simulation world's state as a Scene Instance Config JSON
-          using the name of the loaded scene, either overwritten, if overwrite is True, or
-          with an incrementer in the file name of the form (copy xxxx) where xxxx is a number.
-          This can be used to reload the stage, objects, articulated
-          objects and other values as they currently are.)",
-          "overwrite"_a = false)
       .def("get_light_setup", &Simulator::getLightSetup,
            "key"_a = DEFAULT_LIGHTING_KEY,
            R"(Get a copy of the LightSetup registered with a specific key.)")
-      .def("get_current_light_setup", &Simulator::getCurrentLightSetup,
-           R"(Get a copy of the LightSetup used to create the current scene.)")
       .def(
           "set_light_setup", &Simulator::setLightSetup, "light_setup"_a,
           "key"_a = DEFAULT_LIGHTING_KEY,
-          R"(Register a LightSetup with a specific key. If a LightSetup is already registered with
-          this key, it will be overridden. All Drawables referencing the key will use the newly
-          registered LightSetup.)")
-      /* --- P2P/Fixed Constraints API --- */
+          R"(Register a LightSetup with a specific key. If a LightSetup is already registered with this key, it will be overriden. All Drawables referencing the key will use the newly registered LightSetup.)")
       .def(
-          "create_rigid_constraint", &Simulator::createRigidConstraint,
-          "settings"_a,
-          R"(Create a rigid constraint between two objects or an object and the world from a RigidConstraintsSettings.)")
-      .def("update_rigid_constraint", &Simulator::updateRigidConstraint,
-           "constraint_id"_a, "settings"_a,
-           R"(Update the settings of a rigid constraint.)")
-      .def("get_rigid_constraint_settings",
-           &Simulator::getRigidConstraintSettings, "constraint_id"_a,
-           R"(Get a copy of the settings for an existing rigid constraint.)")
-      .def("remove_rigid_constraint", &Simulator::removeRigidConstraint,
-           "constraint_id"_a, R"(Remove a rigid constraint by id.)")
-      .def(
-          "get_runtime_perf_stat_names", &Simulator::getRuntimePerfStatNames,
-          R"(Runtime perf stats are various scalars helpful for troubleshooting runtime perf. This can be called once at startup. See also get_runtime_perf_stat_values.)")
-      .def(
-          "get_runtime_perf_stat_values", &Simulator::getRuntimePerfStatValues,
-          R"(Runtime perf stats are various scalars helpful for troubleshooting runtime perf. These values generally change after every sim step. See also get_runtime_perf_stat_names.)")
-      .def("get_debug_line_render", &Simulator::getDebugLineRender,
-           pybind11::return_value_policy::reference,
-           R"(Get visualization helper for rendering lines.)");
+          "set_object_light_setup", &Simulator::setObjectLightSetup,
+          "object_id"_a, "light_setup_key"_a, "scene_id"_a = 0,
+          R"(Modify the LightSetup used to the render all components of an object by setting the LightSetup key referenced by all Drawables attached to the object's visual SceneNodes.)")
 
-  // ==== ReplayRenderer ====
-  py::class_<AbstractReplayRenderer, AbstractReplayRenderer::ptr>(
-      m, "ReplayRenderer")
-      .def_static(
-          "create_classic_replay_renderer",
-          [](const ReplayRendererConfiguration& cfg)
-              -> AbstractReplayRenderer::ptr {
-            return std::make_shared<ClassicReplayRenderer>(cfg);
-          },
-          R"(Create a replay renderer using the classic render pipeline.)")
-      .def_static(
-          "create_batch_replay_renderer",
-          [](const ReplayRendererConfiguration& cfg)
-              -> AbstractReplayRenderer::ptr {
-            return std::make_shared<BatchReplayRenderer>(cfg);
-          },
-          R"(Create a replay renderer using the batch render pipeline.)")
-      .def("close", &AbstractReplayRenderer::close,
-           "Releases the graphics context and resources used by the replay "
-           "renderer.")
       .def(
-          "preload_file",
-          [](AbstractReplayRenderer& self, const std::string& filePath) {
-            self.preloadFile(filePath);
-          },
-          R"(Load a composite file that the renderer will use in-place of simulation assets to improve memory usage and performance.)")
-      .def_property_readonly("environment_count",
-                             &AbstractReplayRenderer::environmentCount,
-                             "Get the batch size.")
-      .def("sensor_size", &AbstractReplayRenderer::sensorSize,
-           "Get the resolution of a sensor.")
-      .def("clear_environment", &AbstractReplayRenderer::clearEnvironment,
-           "Clear all instances and resets memory of an environment.")
-      .def("render",
-           static_cast<void (AbstractReplayRenderer::*)(
-               Magnum::GL::AbstractFramebuffer&)>(
-               &AbstractReplayRenderer::render),
-           R"(Render all sensors onto the specified framebuffer.)")
-      .def(
-          "render",
-          [](AbstractReplayRenderer& self,
-             std::vector<Mn::MutableImageView2D> colorImageViews,
-             std::vector<Mn::MutableImageView2D> depthImageViews) {
-            self.render(colorImageViews, depthImageViews);
-          },
-          R"(Render sensors into the specified image vectors (one per environment).
-          Blocks the thread during the GPU-to-CPU memory transfer operation.
-          Empty lists can be supplied to skip the copying render targets.
-          The images are required to be pre-allocated.)",
-          py::arg("color_images") = std::vector<Mn::MutableImageView2D>{},
-          py::arg("depth_images") = std::vector<Mn::MutableImageView2D>{})
-      .def(
-          "set_sensor_transforms_from_keyframe",
-          &AbstractReplayRenderer::setSensorTransformsFromKeyframe,
-          R"(Set the sensor transforms from a keyframe. Sensors are stored as user data and identified using a prefix in their name.)")
-      .def("set_sensor_transform", &AbstractReplayRenderer::setSensorTransform,
-           R"(Set the transform of a specific sensor.)")
-      .def("set_environment_keyframe",
-           &AbstractReplayRenderer::setEnvironmentKeyframe,
-           R"(Set the keyframe for a specific environment.)")
-      .def_static(
-          "environment_grid_size", &AbstractReplayRenderer::environmentGridSize,
-          R"(Get the dimensions (tile counts) of the environment grid.)")
-      .def(
-          "cuda_color_buffer_device_pointer",
-          [](AbstractReplayRenderer& self) {
-            return py::capsule(self.getCudaColorBufferDevicePointer());
-          },
-          R"(Retrieve the color buffer as a CUDA device pointer.)")
-      .def(
-          "cuda_depth_buffer_device_pointer",
-          [](AbstractReplayRenderer& self) {
-            return py::capsule(self.getCudaColorBufferDevicePointer());
-          },
-          R"(Retrieve the depth buffer as a CUDA device pointer.)")
-      .def("debug_line_render", &AbstractReplayRenderer::getDebugLineRender,
-           R"(Get visualization helper for rendering lines.)")
-      .def("unproject", &AbstractReplayRenderer::unproject,
-           R"(Unproject a screen-space point to a world-space ray.)");
+          "get_num_active_contact_points",
+          &Simulator::getNumActiveContactPoints,
+          R"(The number of contact points that were active during the last step. An object resting on another object will involve several active contact points. Once both objects are asleep, the contact points are inactive. This count can be used as a metric for the complexity/cost of collision-handling in the current scene.)");
+  ;
 }
 
 }  // namespace sim

@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -13,30 +13,31 @@
 #include "JsonMagnumTypes.h"
 
 #include "esp/assets/RenderAssetInstanceCreationInfo.h"
-#include "esp/core/Esp.h"
+#include "esp/core/esp.h"
 #include "esp/gfx/replay/Keyframe.h"
-#include "esp/nav/PathFinder.h"
 
 namespace esp {
 namespace io {
 
-inline JsonGenericValue toJsonValue(
-    const esp::assets::PhongMaterialColor& material,
-    JsonAllocator& allocator) {
-  JsonGenericValue obj(rapidjson::kObjectType);
-  addMember(obj, "ambient", material.ambientColor, allocator);
-  addMember(obj, "diffuse", material.diffuseColor, allocator);
-  addMember(obj, "specular", material.specularColor, allocator);
-  return obj;
+inline JsonGenericValue toJsonValue(const esp::vec3f& vec,
+                                    JsonAllocator& allocator) {
+  return toJsonArrayHelper(vec.data(), 3, allocator);
 }
 
-inline bool fromJsonValue(const JsonGenericValue& obj,
-                          esp::assets::PhongMaterialColor& material) {
-  bool success = true;
-  success &= readMember(obj, "ambient", material.ambientColor);
-  success &= readMember(obj, "diffuse", material.diffuseColor);
-  success &= readMember(obj, "specular", material.specularColor);
-  return success;
+inline bool fromJsonValue(const JsonGenericValue& obj, esp::vec3f& val) {
+  if (obj.IsArray() && obj.Size() == 3) {
+    for (rapidjson::SizeType i = 0; i < 3; ++i) {
+      if (obj[i].IsNumber()) {
+        val[i] = obj[i].GetDouble();
+      } else {
+        LOG(ERROR) << " Invalid numeric value specified in JSON vec3f, index :"
+                   << i;
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
 }
 
 inline JsonGenericValue toJsonValue(const esp::geo::CoordinateFrame& frame,
@@ -51,9 +52,9 @@ inline JsonGenericValue toJsonValue(const esp::geo::CoordinateFrame& frame,
 inline bool fromJsonValue(const JsonGenericValue& obj,
                           esp::geo::CoordinateFrame& frame) {
   bool success = true;
-  Mn::Vector3 up;
-  Mn::Vector3 front;
-  Mn::Vector3 origin;
+  esp::vec3f up;
+  esp::vec3f front;
+  esp::vec3f origin;
   success &= readMember(obj, "up", up);
   success &= readMember(obj, "front", front);
   success &= readMember(obj, "origin", origin);
@@ -61,17 +62,28 @@ inline bool fromJsonValue(const JsonGenericValue& obj,
   return success;
 }
 
-JsonGenericValue toJsonValue(const esp::assets::AssetInfo& x,
-                             JsonAllocator& allocator);
+inline JsonGenericValue toJsonValue(const esp::assets::AssetInfo& x,
+                                    JsonAllocator& allocator) {
+  JsonGenericValue obj(rapidjson::kObjectType);
+  addMemberAsUint32(obj, "type", x.type, allocator);
+  addMember(obj, "filepath", x.filepath, allocator);
+  addMember(obj, "frame", x.frame, allocator);
+  addMember(obj, "virtualUnitToMeters", x.virtualUnitToMeters, allocator);
+  addMember(obj, "requiresLighting", x.requiresLighting, allocator);
+  addMember(obj, "splitInstanceMesh", x.splitInstanceMesh, allocator);
+  return obj;
+}
 
-bool fromJsonValue(const JsonGenericValue& obj, esp::assets::AssetInfo& x);
-
-JsonGenericValue toJsonValue(
-    const metadata::attributes::ObjectInstanceShaderType& x,
-    JsonAllocator& allocator);
-
-bool fromJsonValue(const JsonGenericValue& obj,
-                   metadata::attributes::ObjectInstanceShaderType& x);
+inline bool fromJsonValue(const JsonGenericValue& obj,
+                          esp::assets::AssetInfo& x) {
+  readMemberAsUint32(obj, "type", x.type);
+  readMember(obj, "filepath", x.filepath);
+  readMember(obj, "frame", x.frame);
+  readMember(obj, "virtualUnitToMeters", x.virtualUnitToMeters);
+  readMember(obj, "requiresLighting", x.requiresLighting);
+  readMember(obj, "splitInstanceMesh", x.splitInstanceMesh);
+  return true;
+}
 
 inline JsonGenericValue toJsonValue(
     const esp::assets::RenderAssetInstanceCreationInfo& x,
@@ -82,9 +94,7 @@ inline JsonGenericValue toJsonValue(
   addMember(obj, "isStatic", x.isStatic(), allocator);
   addMember(obj, "isRGBD", x.isRGBD(), allocator);
   addMember(obj, "isSemantic", x.isSemantic(), allocator);
-  addMember(obj, "isTextureSemantic", x.isTextureBasedSemantic(), allocator);
   addMember(obj, "lightSetupKey", x.lightSetupKey, allocator);
-  addMember(obj, "rigId", x.rigId, allocator);
   return obj;
 }
 
@@ -98,8 +108,6 @@ inline bool fromJsonValue(const JsonGenericValue& obj,
   readMember(obj, "isRGBD", isRGBD);
   bool isSemantic = false;
   readMember(obj, "isSemantic", isSemantic);
-  bool isTextureSemantic = false;
-  readMember(obj, "isTextureSemantic", isTextureSemantic);
   if (isStatic) {
     x.flags |= esp::assets::RenderAssetInstanceCreationInfo::Flag::IsStatic;
   }
@@ -109,30 +117,8 @@ inline bool fromJsonValue(const JsonGenericValue& obj,
   if (isSemantic) {
     x.flags |= esp::assets::RenderAssetInstanceCreationInfo::Flag::IsSemantic;
   }
-  if (isTextureSemantic) {
-    x.flags |= esp::assets::RenderAssetInstanceCreationInfo::Flag::
-        IsTextureBasedSemantic;
-  }
-
   readMember(obj, "lightSetupKey", x.lightSetupKey);
-  readMember(obj, "rigId", x.rigId);
   return true;
-}
-
-inline JsonGenericValue toJsonValue(const esp::gfx::replay::InstanceMetadata& x,
-                                    JsonAllocator& allocator) {
-  JsonGenericValue obj(rapidjson::kObjectType);
-  addMember(obj, "objectId", x.objectId, allocator);
-  addMember(obj, "semanticId", x.semanticId, allocator);
-  return obj;
-}
-
-inline bool fromJsonValue(const JsonGenericValue& obj,
-                          esp::gfx::replay::InstanceMetadata& x) {
-  bool success = true;
-  success &= readMember(obj, "objectId", x.objectId);
-  success &= readMember(obj, "semanticId", x.semanticId);
-  return success;
 }
 
 inline JsonGenericValue toJsonValue(const esp::gfx::replay::Transform& x,
@@ -156,48 +142,22 @@ inline JsonGenericValue toJsonValue(
     JsonAllocator& allocator) {
   JsonGenericValue obj(rapidjson::kObjectType);
   addMember(obj, "absTransform", x.absTransform, allocator);
+  addMember(obj, "semanticId", x.semanticId, allocator);
   return obj;
 }
 
 inline bool fromJsonValue(const JsonGenericValue& obj,
                           esp::gfx::replay::RenderAssetInstanceState& x) {
   readMember(obj, "absTransform", x.absTransform);
+  readMember(obj, "semanticId", x.semanticId);
   return true;
 }
-
-inline JsonGenericValue toJsonValue(const esp::gfx::LightInfo& x,
-                                    JsonAllocator& allocator) {
-  JsonGenericValue obj(rapidjson::kObjectType);
-  addMember(obj, "vector", x.vector, allocator);
-  addMember(obj, "color", x.color, allocator);
-  addMember(obj, "model", x.model, allocator);
-  return obj;
-}
-
-inline bool fromJsonValue(const JsonGenericValue& obj, esp::gfx::LightInfo& x) {
-  readMember(obj, "vector", x.vector);
-  readMember(obj, "color", x.color);
-  readMember(obj, "model", x.model);
-  return true;
-}
-
-JsonGenericValue toJsonValue(const esp::gfx::LightPositionModel& x,
-                             JsonAllocator& allocator);
-
-bool fromJsonValue(const JsonGenericValue& obj,
-                   esp::gfx::LightPositionModel& x);
 
 JsonGenericValue toJsonValue(const esp::gfx::replay::Keyframe& x,
                              JsonAllocator& allocator);
 
 bool fromJsonValue(const JsonGenericValue& keyframeObj,
                    esp::gfx::replay::Keyframe& keyframe);
-
-// NavMeshSettings JSON serialization
-JsonGenericValue toJsonValue(const esp::nav::NavMeshSettings& x,
-                             JsonAllocator& allocator);
-
-bool fromJsonValue(const JsonGenericValue& obj, esp::nav::NavMeshSettings& x);
 
 }  // namespace io
 }  // namespace esp

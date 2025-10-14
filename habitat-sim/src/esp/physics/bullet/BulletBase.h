@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -8,14 +8,11 @@
 #include <Magnum/BulletIntegration/MotionState.h>
 #include <btBulletDynamicsCommon.h>
 
-#include <utility>
-
 #include "BulletDynamics/Featherstone/btMultiBodyDynamicsWorld.h"
-#include "BulletDynamics/Featherstone/btMultiBodyLinkCollider.h"
 #include "esp/assets/Asset.h"
 #include "esp/assets/BaseMesh.h"
 #include "esp/assets/MeshMetaData.h"
-#include "esp/core/Esp.h"
+#include "esp/core/esp.h"
 #include "esp/scene/SceneNode.h"
 
 namespace esp {
@@ -32,12 +29,12 @@ struct SimulationContactResultCallback
   /**
    * @brief Set when a contact is detected.
    */
-  bool bCollision{false};
+  bool bCollision;
 
   /**
    * @brief Constructor.
    */
-  SimulationContactResultCallback() = default;
+  SimulationContactResultCallback() { bCollision = false; }
 
   /**
    * @brief Called when a contact is detected.
@@ -69,8 +66,7 @@ class BulletBase {
   BulletBase(std::shared_ptr<btMultiBodyDynamicsWorld> bWorld,
              std::shared_ptr<std::map<const btCollisionObject*, int>>
                  collisionObjToObjIds)
-      : bWorld_(std::move(bWorld)),
-        collisionObjToObjIds_(std::move(collisionObjToObjIds)) {}
+      : bWorld_(bWorld), collisionObjToObjIds_(collisionObjToObjIds) {}
 
   /**
    * @brief Destructor cleans up simulation structures for the object.
@@ -78,13 +74,13 @@ class BulletBase {
   virtual ~BulletBase() { bWorld_.reset(); }
 
   /** @brief Get the scalar collision margin of an object. Retun 0.0 for a @ref
-   * esp::physics::RigidStage. See @ref btCompoundShape::getMargin.
+   * RigidObjectType::SCENE. See @ref btCompoundShape::getMargin.
    * @return The scalar collision margin of the object.
    */
-  virtual double getMargin() const { return 0.0; }
+  virtual double getMargin() const { return 0.0; };
 
   /** @brief Set the scalar collision margin of an object. Does not affect @ref
-   * esp::physics::RigidStage. See @ref btCompoundShape::setMargin.
+   * RigidObjectType::SCENE. See @ref btCompoundShape::setMargin.
    * @param margin The new scalar collision margin of the object.
    */
   virtual void setMargin(CORRADE_UNUSED const double margin) {}
@@ -94,61 +90,17 @@ class BulletBase {
    * the rigid body in its local space. See @ref btCompoundShape::getAabb.
    * @return The Aabb.
    */
-  virtual Magnum::Range3D getCollisionShapeAabb() const = 0;
-
-  /**
-   * @brief Recursively construct a @ref btConvexHullShape for collision by
-   * joining loaded mesh assets.
-   * @param transformFromParentToWorld The cumulative parent-to-world
-   * transformation matrix constructed by composition down the @ref
-   * MeshTransformNode tree to the current node.
-   * @param meshGroup Access structure for collision mesh data.
-   * @param node The current @ref MeshTransformNode in the recursion.
-   * @param bConvexShape The convex we are building. Should be a new, empty
-   * shape when passed into entry point.
-   */
-  static void constructJoinedConvexShapeFromMeshes(
-      const Magnum::Matrix4& transformFromParentToWorld,
-      const std::vector<assets::CollisionMeshData>& meshGroup,
-      const assets::MeshTransformNode& node,
-      btConvexHullShape* bConvexShape);
-
-  /**
-   * @brief Recursively construct a @ref btCompoundShape for collision from
-   * loaded mesh assets. A @ref btConvexHullShape is constructed for each
-   * sub-component, transformed to object-local space and added to the compound
-   * in a flat manner for efficiency.
-   * @param transformFromParentToWorld The cumulative parent-to-world
-   * transformation matrix constructed by composition down the @ref
-   * MeshTransformNode tree to the current node.
-   * @param meshGroup Access structure for collision mesh data.
-   * @param node The current @ref MeshTransformNode in the recursion.
-   * @param bObjectShape The compound shape parent for all generated convexes
-   * @param bObjectConvexShapes Datastructure to cache generated convex shapes
-   */
-  static void constructConvexShapesFromMeshes(
-      const Magnum::Matrix4& transformFromParentToWorld,
-      const std::vector<assets::CollisionMeshData>& meshGroup,
-      const assets::MeshTransformNode& node,
-      btCompoundShape* bObjectShape,
-      std::vector<std::unique_ptr<btConvexHullShape>>& bObjectConvexShapes);
+  virtual const Magnum::Range3D getCollisionShapeAabb() const = 0;
 
  protected:
   /** @brief A pointer to the Bullet world to which this object belongs. See
    * @ref btMultiBodyDynamicsWorld.*/
   std::shared_ptr<btMultiBodyDynamicsWorld> bWorld_;
 
-  /** @brief Static data: All components of a @ref esp::physics::RigidStage are
+  /** @brief Static data: All components of a @ref RigidObjectType::SCENE are
    * stored here. Also, all objects set to STATIC are stored here.
    */
   std::vector<std::unique_ptr<btRigidBody>> bStaticCollisionObjects_;
-
-  //! Object data: Composite convex collision shape
-  std::vector<std::unique_ptr<btConvexHullShape>> bObjectConvexShapes_;
-
-  //! list of @ref btCollisionShape for storing arbitrary collision shapes
-  //! referenced within the @ref bObjectShape_.
-  std::vector<std::unique_ptr<btCollisionShape>> bGenericShapes_;
 
   //! keep a map of collision objects to object ids for quick lookups from
   //! Bullet collision checking.

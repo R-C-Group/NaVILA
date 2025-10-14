@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -12,10 +12,7 @@
 #include "BulletCollision/CollisionShapes/btConvexTriangleMeshShape.h"
 #include "BulletCollision/Gimpact/btGImpactShape.h"
 #include "BulletCollision/NarrowPhaseCollision/btRaycastCallback.h"
-#include "BulletCollisionHelper.h"
 #include "BulletRigidStage.h"
-#include "esp/assets/ResourceManager.h"
-#include "esp/physics/CollisionGroupHelper.h"
 
 namespace esp {
 namespace physics {
@@ -48,10 +45,10 @@ bool BulletRigidStage::initialization_LibSpecific() {
 
 }  // initialization_LibSpecific
 
-void BulletRigidStage::setCollidable(bool collidable) {
+bool BulletRigidStage::setCollidable(bool collidable) {
   if (collidable == isCollidable_) {
     // no work
-    return;
+    return true;
   }
 
   isCollidable_ = collidable;
@@ -63,14 +60,15 @@ void BulletRigidStage::setCollidable(bool collidable) {
       bWorld_->removeCollisionObject(object.get());
     }
   }
+
+  return true;
 }
 
 void BulletRigidStage::constructAndAddCollisionObjects() {
   if (bStaticCollisionObjects_.empty()) {
-    auto initAttr = PhysicsObjectBase::getInitializationAttributes<
-        metadata::attributes::StageAttributes>();
     // construct the objects first time
-    const auto collisionAssetHandle = initAttr->getCollisionAssetFullPath();
+    const auto collisionAssetHandle =
+        initializationAttributes_->getCollisionAssetHandle();
 
     const std::vector<assets::CollisionMeshData>& meshGroup =
         resMgr_.getCollisionMesh(collisionAssetHandle);
@@ -78,23 +76,22 @@ void BulletRigidStage::constructAndAddCollisionObjects() {
     const assets::MeshMetaData& metaData =
         resMgr_.getMeshMetaData(collisionAssetHandle);
 
-    // set the configured scaling as the initial transform for collision mesh
-    // construction
-    auto initial_transform = Magnum::Matrix4::scaling(initAttr->getScale());
-    constructBulletSceneFromMeshes(initial_transform, meshGroup, metaData.root);
+    constructBulletSceneFromMeshes(Magnum::Matrix4{}, meshGroup, metaData.root);
 
     for (auto& object : bStaticCollisionObjects_) {
-      object->setFriction(initAttr->getFrictionCoefficient());
-      object->setRestitution(initAttr->getRestitutionCoefficient());
+      object->setFriction(initializationAttributes_->getFrictionCoefficient());
+      object->setRestitution(
+          initializationAttributes_->getRestitutionCoefficient());
       collisionObjToObjIds_->emplace(object.get(), objectId_);
     }
   }
 
   // add the objects to the world
   for (auto& object : bStaticCollisionObjects_) {
-    bWorld_->addRigidBody(object.get(), int(CollisionGroup::Static),
-                          uint32_t(CollisionGroupHelper::getMaskForGroup(
-                              CollisionGroup::Static)));
+    bWorld_->addRigidBody(
+        object.get(),
+        2,       // collisionFilterGroup (2 == StaticFilter)
+        1 + 2);  // collisionFilterMask (1 == DefaultFilter, 2==StaticFilter)
   }
 }
 
@@ -104,23 +101,14 @@ void BulletRigidStage::constructBulletSceneFromMeshes(
     const assets::MeshTransformNode& node) {
   Magnum::Matrix4 transformFromLocalToWorld =
       transformFromParentToWorld * node.transformFromLocalToParent;
+  if (node.meshIDLocal != ID_UNDEFINED) {
+    const assets::CollisionMeshData& mesh = meshGroup[node.meshIDLocal];
 
-  const assets::CollisionMeshData* mesh = nullptr;
-  if (node.meshIDLocal != ID_UNDEFINED)
-    mesh = &meshGroup[node.meshIDLocal];
-  // TODO TriangleStrip and TriangleFan would work
-  if (mesh && mesh->primitive != Mn::MeshPrimitive::Triangles) {
-    ESP_WARNING() << "Unsupported collision mesh primitive" << mesh->primitive
-                  << Mn::Debug::nospace << ", skipping";
-    mesh = nullptr;
-  }
-
-  if (mesh) {
     // SCENE: create a concave static mesh
     btIndexedMesh bulletMesh;
 
-    Corrade::Containers::ArrayView<Magnum::Vector3> v_data = mesh->positions;
-    Corrade::Containers::ArrayView<Magnum::UnsignedInt> ui_data = mesh->indices;
+    Corrade::Containers::ArrayView<Magnum::Vector3> v_data = mesh.positions;
+    Corrade::Containers::ArrayView<Magnum::UnsignedInt> ui_data = mesh.indices;
 
     //! Configure Bullet Mesh
     //! This part is very likely to cause segfault, if done incorrectly
@@ -144,9 +132,7 @@ void BulletRigidStage::constructBulletSceneFromMeshes(
     std::unique_ptr<btBvhTriangleMeshShape> meshShape =
         std::make_unique<btBvhTriangleMeshShape>(indexedVertexArray.get(),
                                                  true);
-    auto initAttr = PhysicsObjectBase::getInitializationAttributes<
-        metadata::attributes::StageAttributes>();
-    meshShape->setMargin(initAttr->getMargin());
+    meshShape->setMargin(initializationAttributes_->getMargin());
     meshShape->setLocalScaling(
         btVector3{transformFromLocalToWorld
                       .scaling()});  // scale is a property of the shape
@@ -164,56 +150,52 @@ void BulletRigidStage::constructBulletSceneFromMeshes(
     std::unique_ptr<btRigidBody> sceneCollisionObject =
         std::make_unique<btRigidBody>(cInfo);
     CORRADE_INTERNAL_ASSERT(sceneCollisionObject->isStaticObject());
-    BulletCollisionHelper::get().mapCollisionObjectTo(
-        sceneCollisionObject.get(),
-        getCollisionDebugName(bStaticCollisionObjects_.size()));
     bStageArrays_.emplace_back(std::move(indexedVertexArray));
     bStageShapes_.emplace_back(std::move(meshShape));
     bStaticCollisionObjects_.emplace_back(std::move(sceneCollisionObject));
   }
 
-  for (const auto& child : node.children) {
+  for (auto& child : node.children) {
     constructBulletSceneFromMeshes(transformFromLocalToWorld, meshGroup, child);
   }
 }  // constructBulletSceneFromMeshes
 
 void BulletRigidStage::setFrictionCoefficient(
     const double frictionCoefficient) {
-  for (std::size_t i = 0; i < bStaticCollisionObjects_.size(); ++i) {
+  for (std::size_t i = 0; i < bStaticCollisionObjects_.size(); i++) {
     bStaticCollisionObjects_[i]->setFriction(frictionCoefficient);
   }
 }
 
 void BulletRigidStage::setRestitutionCoefficient(
     const double restitutionCoefficient) {
-  for (std::size_t i = 0; i < bStaticCollisionObjects_.size(); ++i) {
+  for (std::size_t i = 0; i < bStaticCollisionObjects_.size(); i++) {
     bStaticCollisionObjects_[i]->setRestitution(restitutionCoefficient);
   }
 }
 
 double BulletRigidStage::getFrictionCoefficient() const {
-  if (bStaticCollisionObjects_.empty()) {
+  if (bStaticCollisionObjects_.size() == 0) {
     return 0.0;
   } else {
     // Assume uniform friction in scene parts
-    return static_cast<double>(bStaticCollisionObjects_.back()->getFriction());
+    return bStaticCollisionObjects_.back()->getFriction();
   }
 }
 
 double BulletRigidStage::getRestitutionCoefficient() const {
   // Assume uniform restitution in scene parts
-  if (bStaticCollisionObjects_.empty()) {
+  if (bStaticCollisionObjects_.size() == 0) {
     return 0.0;
   } else {
-    return static_cast<double>(
-        bStaticCollisionObjects_.back()->getRestitution());
+    return bStaticCollisionObjects_.back()->getRestitution();
   }
 }
 
-Magnum::Range3D BulletRigidStage::getCollisionShapeAabb() const {
+const Magnum::Range3D BulletRigidStage::getCollisionShapeAabb() const {
   Magnum::Range3D combinedAABB;
   // concatenate all component AABBs
-  for (const auto& object : bStaticCollisionObjects_) {
+  for (auto& object : bStaticCollisionObjects_) {
     btVector3 localAabbMin, localAabbMax;
     object->getCollisionShape()->getAabb(object->getWorldTransform(),
                                          localAabbMin, localAabbMax);
@@ -229,10 +211,6 @@ Magnum::Range3D BulletRigidStage::getCollisionShapeAabb() const {
   }
   return combinedAABB;
 }  // getCollisionShapeAabb
-
-std::string BulletRigidStage::getCollisionDebugName(int subpartId) {
-  return "Stage, subpart " + std::to_string(subpartId);
-}
 
 }  // namespace physics
 }  // namespace esp

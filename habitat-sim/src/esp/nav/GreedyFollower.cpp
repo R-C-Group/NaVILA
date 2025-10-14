@@ -1,14 +1,13 @@
-/** Copyright (c) Meta Platforms, Inc. and its affiliates.
- *  This source code is licensed under the MIT license found in the
- *  LICENSE file in the root directory of this source tree.
- */
-
 #include "esp/nav/GreedyFollower.h"
 
-#include "esp/core/Esp.h"
-#include "esp/geo/Geo.h"
+#include <Magnum/EigenIntegration/GeometryIntegration.h>
+#include <Magnum/EigenIntegration/Integration.h>
+
+#include "esp/core/esp.h"
+#include "esp/geo/geo.h"
 
 namespace Mn = Magnum;
+using Mn::EigenIntegration::cast;
 
 namespace esp {
 namespace nav {
@@ -18,9 +17,9 @@ GreedyGeodesicFollowerImpl::GreedyGeodesicFollowerImpl(
     MoveFn& moveForward,
     MoveFn& turnLeft,
     MoveFn& turnRight,
-    float goalDist,
-    float forwardAmount,
-    float turnAmount,
+    double goalDist,
+    double forwardAmount,
+    double turnAmount,
     bool fixThrashing,
     int thrashingThreshold)
     : pathfinder_{pathfinder},
@@ -31,12 +30,12 @@ GreedyGeodesicFollowerImpl::GreedyGeodesicFollowerImpl(
       goalDist_{goalDist},
       turnAmount_{turnAmount},
       fixThrashing_{fixThrashing},
-      thrashingThreshold_{thrashingThreshold} {}
+      thrashingThreshold_{thrashingThreshold} {};
 
 float GreedyGeodesicFollowerImpl::geoDist(const Mn::Vector3& start,
                                           const Mn::Vector3& end) {
-  geoDistPath_.requestedStart = start;
-  geoDistPath_.requestedEnd = end;
+  geoDistPath_.requestedStart = cast<vec3f>(start);
+  geoDistPath_.requestedEnd = cast<vec3f>(end);
   pathfinder_->findPath(geoDistPath_);
   return geoDistPath_.geodesicDistance;
 }
@@ -52,7 +51,7 @@ GreedyGeodesicFollowerImpl::TryStepResult GreedyGeodesicFollowerImpl::tryStep(
 
   const float geoDistAfter = geoDist(newPose, end);
   const float distToObsAfter = pathfinder_->distanceToClosestObstacle(
-      newPose, 1.1f * closeToObsThreshold_);
+      cast<vec3f>(newPose), 1.1 * closeToObsThreshold_);
 
   return {geoDistAfter, distToObsAfter, didCollide};
 }
@@ -89,7 +88,7 @@ GreedyGeodesicFollowerImpl::nextBestPrimAlong(const core::RigidState& state,
     return {CODES::STOP};
   }
 
-  // Intialize bestReward to the minimum acceptable reward -- we are just
+  // Intialize bestReward to the minumum acceptable reward -- we are just
   // constantly colliding
   float bestReward = -collisionCost_;
   std::vector<CODES> bestPrim, leftPrim, rightPrim;
@@ -102,7 +101,7 @@ GreedyGeodesicFollowerImpl::nextBestPrimAlong(const core::RigidState& state,
 
   // Plan over all primitives of the form [LEFT] * n + [FORWARD]
   // or [RIGHT] * n + [FORWARD]
-  for (float angle = 0; angle < Mn::Constants::pi(); angle += turnAmount_) {
+  for (float angle = 0; angle < M_PI; angle += turnAmount_) {
     {
       const float reward = computeReward(leftDummyNode_, path, leftPrim.size());
       if (reward > bestReward) {
@@ -159,8 +158,8 @@ GreedyGeodesicFollowerImpl::CODES GreedyGeodesicFollowerImpl::nextActionAlong(
     const core::RigidState& start,
     const Mn::Vector3& end) {
   ShortestPath path;
-  path.requestedStart = start.translation;
-  path.requestedEnd = end;
+  path.requestedStart = cast<vec3f>(start.translation);
+  path.requestedEnd = cast<vec3f>(end);
   pathfinder_->findPath(path);
 
   CODES nextAction;
@@ -169,7 +168,7 @@ GreedyGeodesicFollowerImpl::CODES GreedyGeodesicFollowerImpl::nextActionAlong(
     thrashingActions_.pop_back();
   } else {
     const auto nextActions = nextBestPrimAlong(start, path);
-    if (nextActions.empty()) {
+    if (nextActions.size() == 0) {
       nextAction = CODES::ERROR;
     } else if (fixThrashing_ && isThrashing()) {
       thrashingActions_ = {nextActions.rbegin(), nextActions.rend()};
@@ -196,11 +195,11 @@ GreedyGeodesicFollowerImpl::findPath(const core::RigidState& start,
     core::RigidState state{findPathDummyNode_.rotation(),
                            findPathDummyNode_.MagnumObject::translation()};
     ShortestPath path;
-    path.requestedStart = state.translation;
-    path.requestedEnd = end;
+    path.requestedStart = cast<vec3f>(state.translation);
+    path.requestedEnd = cast<vec3f>(end);
     pathfinder_->findPath(path);
     const auto nextPrim = nextBestPrimAlong(state, path);
-    if (nextPrim.empty()) {
+    if (nextPrim.size() == 0) {
       actions_.emplace_back(CODES::ERROR);
     } else {
       for (const auto nextAction : nextPrim) {

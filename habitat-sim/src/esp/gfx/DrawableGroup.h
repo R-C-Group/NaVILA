@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -11,7 +11,7 @@
 #include <unordered_map>
 
 #include <functional>
-#include "esp/core/Esp.h"
+#include "esp/core/esp.h"
 
 namespace esp {
 namespace gfx {
@@ -24,7 +24,7 @@ class Drawable;
  */
 class DrawableGroup : public Magnum::SceneGraph::DrawableGroup3D {
  public:
-  ~DrawableGroup() override;
+  virtual ~DrawableGroup();
 
   /**
    * @brief Add a drawable to the group.
@@ -43,7 +43,7 @@ class DrawableGroup : public Magnum::SceneGraph::DrawableGroup3D {
 
   /**
    * @brief Given drawable id, returns if drawable is in the group
-   * @param id drawable id
+   * @param id, drawable id
    * @return true if the drawable is in the group, otherwise false
    */
   bool hasDrawable(uint64_t id) const;
@@ -52,7 +52,7 @@ class DrawableGroup : public Magnum::SceneGraph::DrawableGroup3D {
    * @brief Given drawable id, returns nullptr if the id is not in this
    * drawable group, otherwise the raw pointer to the object
    *
-   * @param id drawable id
+   * @param id, drawable id
    * @return raw pointer to the drawable, or nullptr
    */
   Drawable* getDrawable(uint64_t id) const;

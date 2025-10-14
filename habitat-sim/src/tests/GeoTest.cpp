@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -6,12 +6,12 @@
 #include <Corrade/TestSuite/Compare/Numeric.h>
 #include <Corrade/TestSuite/Tester.h>
 #include <Corrade/Utility/DebugStl.h>
+#include <Magnum/EigenIntegration/Integration.h>
 #include <Magnum/Math/FunctionsBatch.h>
-#include <Magnum/Math/Range.h>
 #include "esp/core/Utility.h"
 #include "esp/geo/CoordinateFrame.h"
-#include "esp/geo/Geo.h"
 #include "esp/geo/OBB.h"
+#include "esp/geo/geo.h"
 
 namespace Cr = Corrade;
 namespace Mn = Magnum;
@@ -20,7 +20,26 @@ using namespace esp;
 using namespace esp::geo;
 
 // reference: https://github.com/facebookresearch/habitat-sim/pull/496/files
-namespace {
+namespace Test {
+// standard method
+// transform the 8 corners, and extract the min and max
+Mn::Range3D getTransformedBB_standard(const Mn::Range3D& range,
+                                      const Mn::Matrix4& xform) {
+  std::vector<Mn::Vector3> corners;
+  corners.push_back(xform.transformPoint(range.frontBottomLeft()));
+  corners.push_back(xform.transformPoint(range.frontBottomRight()));
+  corners.push_back(xform.transformPoint(range.frontTopLeft()));
+  corners.push_back(xform.transformPoint(range.frontTopRight()));
+
+  corners.push_back(xform.transformPoint(range.backTopLeft()));
+  corners.push_back(xform.transformPoint(range.backTopRight()));
+  corners.push_back(xform.transformPoint(range.backBottomLeft()));
+  corners.push_back(xform.transformPoint(range.backBottomRight()));
+
+  Mn::Range3D transformedBB{Mn::Math::minmax(corners)};
+
+  return transformedBB;
+}
 
 struct GeoTest : Cr::TestSuite::Tester {
   explicit GeoTest();
@@ -32,10 +51,6 @@ struct GeoTest : Cr::TestSuite::Tester {
   // benchmarks
   void getTransformedBB_standard();
   void getTransformedBB();
-  // standard method
-  // transform the 8 corners, and extract the min and max
-  Mn::Range3D getTransformedBB_standard(const Mn::Range3D& range,
-                                        const Mn::Matrix4& xform);
 
   std::vector<Mn::Matrix4> xforms_;
   // number of transformations
@@ -44,7 +59,6 @@ struct GeoTest : Cr::TestSuite::Tester {
   const unsigned int iterations_ = 10;
   Mn::Range3D box_{Mn::Vector3{-10.0f, -10.0f, -10.0f},
                    Mn::Vector3{10.0f, 10.0f, 10.0f}};
-  esp::logging::LoggingContext loggingContext_;
 };
 
 GeoTest::GeoTest() {
@@ -72,30 +86,10 @@ GeoTest::GeoTest() {
   }
 }
 
-// standard method
-// transform the 8 corners, and extract the min and max
-Mn::Range3D GeoTest::getTransformedBB_standard(const Mn::Range3D& range,
-                                               const Mn::Matrix4& xform) {
-  std::vector<Mn::Vector3> corners;
-  corners.push_back(xform.transformPoint(range.frontBottomLeft()));
-  corners.push_back(xform.transformPoint(range.frontBottomRight()));
-  corners.push_back(xform.transformPoint(range.frontTopLeft()));
-  corners.push_back(xform.transformPoint(range.frontTopRight()));
-
-  corners.push_back(xform.transformPoint(range.backTopLeft()));
-  corners.push_back(xform.transformPoint(range.backTopRight()));
-  corners.push_back(xform.transformPoint(range.backBottomLeft()));
-  corners.push_back(xform.transformPoint(range.backBottomRight()));
-
-  Mn::Range3D transformedBB{Mn::Math::minmax(corners)};
-
-  return transformedBB;
-}
-
 void GeoTest::getTransformedBB_standard() {
   Mn::Range3D aabb;
   CORRADE_BENCHMARK(iterations_) for (auto& xform : xforms_) {
-    aabb = getTransformedBB_standard(box_, xform);
+    aabb = Test::getTransformedBB_standard(box_, xform);
   }
 }
 
@@ -111,7 +105,7 @@ void GeoTest::aabb() {
   // respectively.
   // compare the results, which should be identical
   for (auto& xform : xforms_) {
-    Mn::Range3D aabbControl = getTransformedBB_standard(box_, xform);
+    Mn::Range3D aabbControl = Test::getTransformedBB_standard(box_, xform);
     Mn::Range3D aabbTest = esp::geo::getTransformedBB(box_, xform);
 
     float eps = 1e-8f;
@@ -124,87 +118,88 @@ void GeoTest::aabb() {
 
 void GeoTest::obbConstruction() {
   OBB obb1;
-  const Mn::Vector3 center(0, 0, 0);
-  const Mn::Vector3 dimensions(20, 2, 10);
-  const auto rot1 =
-      Mn::Quaternion::rotation(Mn::Vector3::yAxis(), Mn::Vector3::zAxis());
+  const vec3f center(0, 0, 0);
+  const vec3f dimensions(20, 2, 10);
+  const quatf rot1 = quatf::FromTwoVectors(vec3f::UnitY(), vec3f::UnitZ());
   OBB obb2(center, dimensions, rot1);
 
-  CORRADE_COMPARE(obb2.center(), center);
-  CORRADE_COMPARE(obb2.sizes(), dimensions);
-  CORRADE_COMPARE(obb2.halfExtents(), dimensions / 2);
-  CORRADE_COMPARE(obb2.rotation(), rot1);
+  CORRADE_VERIFY(obb2.center().isApprox(center));
+  CORRADE_VERIFY(obb2.sizes().isApprox(dimensions));
+  CORRADE_VERIFY(obb2.halfExtents().isApprox(dimensions / 2));
+  CORRADE_VERIFY(obb2.rotation().coeffs().isApprox(rot1.coeffs()));
 
-  Mn::Range3D aabb(Mn::Vector3(-1, -2, -3), Mn::Vector3(3, 2, 1));
+  box3f aabb(vec3f(-1, -2, -3), vec3f(3, 2, 1));
   OBB obb3(aabb);
-  CORRADE_COMPARE(obb3.center(), aabb.center());
-  CORRADE_COMPARE(obb3.toAABB(), aabb);
+  CORRADE_VERIFY(obb3.center().isApprox(aabb.center()));
+  CORRADE_VERIFY(obb3.toAABB().isApprox(aabb));
 }
 
 void GeoTest::obbFunctions() {
-  const Mn::Vector3 center(0, 0, 0);
-  const Mn::Vector3 dimensions(20, 2, 10);
-  const auto rot1 =
-      Mn::Quaternion::rotation(Mn::Vector3::yAxis(), Mn::Vector3::zAxis());
+  const vec3f center(0, 0, 0);
+  const vec3f dimensions(20, 2, 10);
+  const quatf rot1 = quatf::FromTwoVectors(vec3f::UnitY(), vec3f::UnitZ());
   OBB obb2(center, dimensions, rot1);
-  CORRADE_VERIFY(obb2.contains(Mn::Vector3(0, 0, 0)));
-  CORRADE_VERIFY(obb2.contains(Mn::Vector3(-5, -2, 0.5)));
-  CORRADE_VERIFY(obb2.contains(Mn::Vector3(5, 0, -0.5)));
-  CORRADE_VERIFY(!obb2.contains(Mn::Vector3(5, 0, 2)));
-  CORRADE_VERIFY(!obb2.contains(Mn::Vector3(-10, 0.5, -2)));
+  CORRADE_VERIFY(obb2.contains(vec3f(0, 0, 0)));
+  CORRADE_VERIFY(obb2.contains(vec3f(-5, -2, 0.5)));
+  CORRADE_VERIFY(obb2.contains(vec3f(5, 0, -0.5)));
+  CORRADE_VERIFY(!obb2.contains(vec3f(5, 0, 2)));
+  CORRADE_VERIFY(!obb2.contains(vec3f(-10, 0.5, -2)));
 
-  const auto aabb = obb2.toAABB();
+  const box3f aabb = obb2.toAABB();
 
-  CORRADE_COMPARE(aabb.min(), (Mn::Vector3{-10.0f, -5.0f, -1.0f}));
-  CORRADE_COMPARE(aabb.max(), (Mn::Vector3{10.0f, 5.0f, 1.0f}));
+  CORRADE_COMPARE(Mn::Vector3{aabb.min()}, (Mn::Vector3{-10.0f, -5.0f, -1.0f}));
+  CORRADE_COMPARE(Mn::Vector3{aabb.max()}, (Mn::Vector3{10.0f, 5.0f, 1.0f}));
 
-  const auto identity = obb2.worldToLocal() * obb2.localToWorld();
-  CORRADE_COMPARE(identity, Mn::Matrix4());
-  CORRADE_VERIFY(
-      obb2.contains(obb2.localToWorld().transformPoint(Mn::Vector3(0, 0, 0))));
-  CORRADE_VERIFY(
-      obb2.contains(obb2.localToWorld().transformPoint(Mn::Vector3(1, -1, 1))));
-  CORRADE_VERIFY(obb2.contains(
-      obb2.localToWorld().transformPoint(Mn::Vector3(-1, -1, -1))));
-  CORRADE_VERIFY(!obb2.contains(
-      obb2.localToWorld().transformPoint(Mn::Vector3(-1, -1.5, -1))));
-  CORRADE_COMPARE_AS(obb2.distance(Mn::Vector3(-20, 0, 0)), 10, float);
-  CORRADE_COMPARE_AS(obb2.distance(Mn::Vector3(-10, -5, 2)), 1, float);
+  const Transform identity = obb2.worldToLocal() * obb2.localToWorld();
+  CORRADE_VERIFY(identity.isApprox(Transform::Identity()));
+  CORRADE_VERIFY(obb2.contains(obb2.localToWorld() * vec3f(0, 0, 0)));
+  CORRADE_VERIFY(obb2.contains(obb2.localToWorld() * vec3f(1, -1, 1)));
+  CORRADE_VERIFY(obb2.contains(obb2.localToWorld() * vec3f(-1, -1, -1)));
+  CORRADE_VERIFY(!obb2.contains(obb2.localToWorld() * vec3f(-1, -1.5, -1)));
+  CORRADE_COMPARE_AS(obb2.distance(vec3f(-20, 0, 0)), 10, float);
+  CORRADE_COMPARE_AS(obb2.distance(vec3f(-10, -5, 2)), 1, float);
 }
 
 void GeoTest::coordinateFrame() {
-  const Mn::Vector3 origin(1, -2, 3);
-  const Mn::Vector3 up(0, 0, 1);
-  const Mn::Vector3 front(-1, 0, 0);
-  auto rotation = Mn::Quaternion::rotation(ESP_UP, up) *
-                  Mn::Quaternion::rotation(ESP_FRONT, front);
-  Mn::Matrix4 xform = Mn::Matrix4::from(rotation.toMatrix(), origin);
+  const vec3f origin(1, -2, 3);
+  const vec3f up(0, 0, 1);
+  const vec3f front(-1, 0, 0);
+  quatf rotation = quatf::FromTwoVectors(ESP_UP, up) *
+                   quatf::FromTwoVectors(ESP_FRONT, front);
+  Transform xform;
+  xform.rotate(rotation);
+  xform.translate(origin);
 
   CoordinateFrame c1(up, front, origin);
-  CORRADE_COMPARE(c1.up(), up);
-  CORRADE_COMPARE(c1.gravity(), -up);
-  CORRADE_COMPARE(c1.front(), front);
-  CORRADE_COMPARE(c1.back(), -front);
-  CORRADE_COMPARE(c1.up(), rotation.transformVectorNormalized(ESP_UP));
-  CORRADE_COMPARE(c1.front(), rotation.transformVectorNormalized(ESP_FRONT));
-  CORRADE_COMPARE(c1.origin(), origin);
-  CORRADE_COMPARE(c1.rotationWorldToFrame(), rotation);
+  CORRADE_VERIFY(c1.up().isApprox(up));
+  CORRADE_VERIFY(c1.gravity().isApprox(-up));
+  CORRADE_VERIFY(c1.front().isApprox(front));
+  CORRADE_VERIFY(c1.back().isApprox(-front));
+  CORRADE_VERIFY(c1.up().isApprox(rotation * ESP_UP));
+  CORRADE_VERIFY(c1.front().isApprox(rotation * ESP_FRONT));
+  CORRADE_VERIFY(c1.origin().isApprox(origin));
+  CORRADE_VERIFY(c1.rotationWorldToFrame().isApprox(rotation));
 
   CoordinateFrame c2(rotation, origin);
-  CORRADE_COMPARE(c1, c2);
-  CORRADE_COMPARE(c2.up(), up);
-  CORRADE_COMPARE(c2.gravity(), -up);
-  CORRADE_COMPARE(c2.front(), front);
-  CORRADE_COMPARE(c2.back(), -front);
-  CORRADE_COMPARE(c2.up(), rotation.transformVectorNormalized(ESP_UP));
-  CORRADE_COMPARE(c2.front(), rotation.transformVectorNormalized(ESP_FRONT));
-  CORRADE_COMPARE(c2.origin(), origin);
-  CORRADE_COMPARE(c2.rotationWorldToFrame(), rotation);
+  CORRADE_VERIFY(c1 == c2);
+  CORRADE_VERIFY(c2.up().isApprox(up));
+  CORRADE_VERIFY(c2.gravity().isApprox(-up));
+  CORRADE_VERIFY(c2.front().isApprox(front));
+  CORRADE_VERIFY(c2.back().isApprox(-front));
+  CORRADE_VERIFY(c2.up().isApprox(rotation * ESP_UP));
+  CORRADE_VERIFY(c2.front().isApprox(rotation * ESP_FRONT));
+  CORRADE_VERIFY(c2.origin().isApprox(origin));
+  CORRADE_VERIFY(c2.rotationWorldToFrame().isApprox(rotation));
 
-  const std::string j = R"("up":[0,0,1],"front":[-1,0,0],"origin":[1,-2,3])";
-  CORRADE_COMPARE(c1.toString(), j);
+  const std::string j = R"({"up":[0,0,1],"front":[-1,0,0],"origin":[1,-2,3]})";
+  CORRADE_COMPARE(c1.toJson(), j);
+  CoordinateFrame c3(j);
+  CORRADE_VERIFY(c1 == c3);
+  CoordinateFrame c4;
+  c4.fromJson(j);
+  CORRADE_VERIFY(c3 == c4);
 }
 
-}  // namespace
+}  // namespace Test
 
-CORRADE_TEST_MAIN(GeoTest)
+CORRADE_TEST_MAIN(Test::GeoTest)

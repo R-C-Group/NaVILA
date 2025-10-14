@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
+# Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
@@ -11,10 +11,6 @@ from io import StringIO
 from unittest.mock import patch
 
 import pytest
-
-# Need to import quaternion library here despite it not being used or else importing
-# habitat_sim below will cause an invalid free() when audio is enabled in sim compilation
-import quaternion  # noqa: F401
 
 from habitat_sim.utils import profiling_utils
 
@@ -28,7 +24,6 @@ test_requires_torch_cuda = pytest.mark.skipif(
     not torch.cuda.is_available(),
     reason="Torch not installed with CUDA support so skipping test",
 )
-
 
 # Based on the env var, reloading the profiling_utils module should set
 # profiling_utils._enable_profiling to True or False.

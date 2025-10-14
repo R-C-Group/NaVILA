@@ -4,18 +4,14 @@ about: Submit a bug report to help us improve Habitat
 
 ---
 
-## Habitat-Sim version
-vx.x.x or main?
-
-Habitat is under active development, and we advise users to restrict themselves to stable releases. Are you using the latest [release version](https://github.com/facebookresearch/habitat-sim/releases) of Habitat-Sim? The bug you are about to report may already be fixed in the latest version.
-
-Main branch contains 'bleeding edge' code, but we do appreciate bug reports for it!
-
 ## 🐛 Bug
 
 <!-- A clear and concise description of what the bug is. -->
 
-## Steps to Reproduce
+## Command
+`# command that you run`
+
+## To Reproduce
 
 Steps to reproduce the behavior:
 
@@ -24,8 +20,6 @@ Steps to reproduce the behavior:
 1.
 2.
 3.
-
- Please note that without a minimal working example to reproduce the bug, we may not be able to help you.
 
 <!-- If you have a code sample, error messages, stack traces, please provide it here as well -->
 
@@ -40,13 +34,13 @@ Steps to reproduce the behavior:
 ## System Info
 
 Please copy and paste the output from the
-[environment collection script](https://github.com/facebookresearch/habitat-sim/tree/main/habitat_sim/utils/collect_env.py)
+[environment collection script](https://github.com/facebookresearch/habitat-sim/tree/master/habitat_sim/utils/collect_env.py)
 (or fill out the checklist below manually).
 
 You can run the script with:
 ```
 # For security purposes, please check the contents of collect_env.py before running it.
-python src_python/habitat_sim/utils/collect_env.py
+python habitat_sim/utils/collect_env.py
 ```
 
  - OS (e.g., Linux):

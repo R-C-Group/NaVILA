@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
 set -ex
 
 function install_92 {
@@ -115,14 +111,14 @@ function prune_92 {
     export GENCODE_CUDNN="-gencode arch=compute_35,code=sm_35 -gencode arch=compute_37,code=sm_37 -gencode arch=compute_50,code=sm_50 -gencode arch=compute_60,code=sm_60 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_70,code=sm_70"
 
     # all CUDA libs except CuDNN and CuBLAS (cudnn and cublas need arch 3.7 included)
-    grep "\.a" $CUDA_LIB_DIR/* | grep -v "culibos" | grep -v "cudart" | grep -v "cudnn" | grep -v "cublas" | grep -v "cusolver" \
-        | xargs -I {} bash -c \
-            "echo {} && $NVPRUNE $GENCODE $CUDA_LIB_DIR/{} -o $CUDA_LIB_DIR/{}"
+    ls $CUDA_LIB_DIR/ | grep "\.a" | grep -v "culibos" | grep -v "cudart" | grep -v "cudnn" | grep -v "cublas" | grep -v "cusolver" \
+	| xargs -I {} bash -c \
+		"echo {} && $NVPRUNE $GENCODE $CUDA_LIB_DIR/{} -o $CUDA_LIB_DIR/{}"
 
     # prune CuDNN and CuBLAS
-    $NVPRUNE "$GENCODE_CUDNN" $CUDA_LIB_DIR/libcudnn_static.a -o $CUDA_LIB_DIR/libcudnn_static.a
-    $NVPRUNE "$GENCODE_CUDNN" $CUDA_LIB_DIR/libcublas_static.a -o $CUDA_LIB_DIR/libcublas_static.a
-    $NVPRUNE "$GENCODE_CUDNN" $CUDA_LIB_DIR/libcublas_device.a -o $CUDA_LIB_DIR/libcublas_device.a
+    $NVPRUNE $GENCODE_CUDNN $CUDA_LIB_DIR/libcudnn_static.a -o $CUDA_LIB_DIR/libcudnn_static.a
+    $NVPRUNE $GENCODE_CUDNN $CUDA_LIB_DIR/libcublas_static.a -o $CUDA_LIB_DIR/libcublas_static.a
+    $NVPRUNE $GENCODE_CUDNN $CUDA_LIB_DIR/libcublas_device.a -o $CUDA_LIB_DIR/libcublas_device.a
 
 }
 
@@ -139,13 +135,13 @@ function prune_100 {
 
     # all CUDA libs except CuDNN and CuBLAS (cudnn and cublas need arch 3.7 included)
     # curand cannot be pruned, as there's a bug in 10.0 + curand_static + nvprune. Filed with nvidia at 2460767
-    grep "\.a" $CUDA_LIB_DIR/* | grep -v "culibos" | grep -v "cudart" | grep -v "cudnn" | grep -v "cublas" | grep -v "metis" | grep -v "curand"  \
-        | xargs -I {} bash -c \
-            "echo {} && $NVPRUNE $GENCODE $CUDA_LIB_DIR/{} -o $CUDA_LIB_DIR/{}"
+    ls $CUDA_LIB_DIR/ | grep "\.a" | grep -v "culibos" | grep -v "cudart" | grep -v "cudnn" | grep -v "cublas" | grep -v "metis" | grep -v "curand"  \
+	| xargs -I {} bash -c \
+		"echo {} && $NVPRUNE $GENCODE $CUDA_LIB_DIR/{} -o $CUDA_LIB_DIR/{}"
 
     # prune CuDNN and CuBLAS
-    $NVPRUNE "$GENCODE_CUDNN" $CUDA_LIB_DIR/libcudnn_static.a -o $CUDA_LIB_DIR/libcudnn_static.a
-    $NVPRUNE "$GENCODE_CUDNN" $CUDA_LIB_DIR/libcublas_static.a -o $CUDA_LIB_DIR/libcublas_static.a
+    $NVPRUNE $GENCODE_CUDNN $CUDA_LIB_DIR/libcudnn_static.a -o $CUDA_LIB_DIR/libcudnn_static.a
+    $NVPRUNE $GENCODE_CUDNN $CUDA_LIB_DIR/libcublas_static.a -o $CUDA_LIB_DIR/libcublas_static.a
 
 }
 
@@ -161,14 +157,14 @@ function prune_101 {
     export GENCODE_CUDNN="-gencode arch=compute_35,code=sm_35 -gencode arch=compute_37,code=sm_37 -gencode arch=compute_50,code=sm_50 -gencode arch=compute_60,code=sm_60 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_70,code=sm_70 -gencode arch=compute_75,code=sm_75"
 
     # all CUDA libs except CuDNN and CuBLAS (cudnn and cublas need arch 3.7 included)
-    grep "\.a" $CUDA_LIB_DIR/* | grep -v "culibos" | grep -v "cudart" | grep -v "cudnn" | grep -v "cublas" | grep -v "metis"  \
-        | xargs -I {} bash -c \
-            "echo {} && $NVPRUNE $GENCODE $CUDA_LIB_DIR/{} -o $CUDA_LIB_DIR/{}"
+    ls $CUDA_LIB_DIR/ | grep "\.a" | grep -v "culibos" | grep -v "cudart" | grep -v "cudnn" | grep -v "cublas" | grep -v "metis"  \
+	| xargs -I {} bash -c \
+		"echo {} && $NVPRUNE $GENCODE $CUDA_LIB_DIR/{} -o $CUDA_LIB_DIR/{}"
 
     # prune CuDNN and CuBLAS
-    $NVPRUNE "$GENCODE_CUDNN" $CUDA_LIB_DIR/libcudnn_static.a -o $CUDA_LIB_DIR/libcudnn_static.a
-    $NVPRUNE "$GENCODE_CUDNN" $CUDA_LIB_DIR/libcublas_static.a -o $CUDA_LIB_DIR/libcublas_static.a
-    $NVPRUNE "$GENCODE_CUDNN" $CUDA_LIB_DIR/libcublasLt_static.a -o $CUDA_LIB_DIR/libcublasLt_static.a
+    $NVPRUNE $GENCODE_CUDNN $CUDA_LIB_DIR/libcudnn_static.a -o $CUDA_LIB_DIR/libcudnn_static.a
+    $NVPRUNE $GENCODE_CUDNN $CUDA_LIB_DIR/libcublas_static.a -o $CUDA_LIB_DIR/libcublas_static.a
+    $NVPRUNE $GENCODE_CUDNN $CUDA_LIB_DIR/libcublasLt_static.a -o $CUDA_LIB_DIR/libcublasLt_static.a
 }
 
 
@@ -176,14 +172,15 @@ function prune_101 {
 while test $# -gt 0
 do
     case "$1" in
-        9.2) install_92; prune_92
-            ;;
-        10.0) install_100; prune_100
-            ;;
-        10.1) install_101; prune_101
-            ;;
-        *) echo "bad argument $1"; exit 1
-            ;;
+	9.2) install_92; prune_92
+		;;
+	10.0) install_100; prune_100
+		;;
+	10.1) install_101; prune_101
+		;;
+	*) echo "bad argument $1"; exit 1
+	   ;;
     esac
     shift
 done
+

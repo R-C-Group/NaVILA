@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -10,23 +10,19 @@ namespace physics {
 RigidObject::RigidObject(scene::SceneNode* rigidBodyNode,
                          int objectId,
                          const assets::ResourceManager& resMgr)
-    : RigidBase(rigidBodyNode, objectId, resMgr),
-      velControl_(VelocityControl::create()) {}
+    : RigidBase(rigidBodyNode, resMgr), velControl_(VelocityControl::create()) {
+  objectId_ = objectId;
+}
 
-bool RigidObject::initialize(
-    metadata::attributes::AbstractObjectAttributes::ptr initAttributes) {
-  if (objInitAttributes_ != nullptr) {
-    ESP_ERROR() << "Cannot initialize a RigidObject more than once";
+bool RigidObject::initialize(const std::string& handle) {
+  if (initializationAttributes_ != nullptr) {
+    LOG(ERROR) << "Cannot initialize a RigidObject more than once";
     return false;
   }
 
-  setScale(initAttributes->getScale());
-
-  // save the copy of the template used to create the object at initialization
-  // time
-  setUserAttributes(initAttributes->getUserConfiguration());
-  setMarkerSets(initAttributes->getMarkerSetsConfiguration());
-  objInitAttributes_ = std::move(initAttributes);
+  // save a copy of the template at initialization time
+  initializationAttributes_ =
+      resMgr_.getObjectAttributesManager()->getObjectCopyByHandle(handle);
 
   return initialization_LibSpecific();
 }  // RigidObject::initialize
@@ -37,7 +33,7 @@ bool RigidObject::finalizeObject() {
   // cast initialization attributes
   metadata::attributes::ObjectAttributes::cptr ObjectAttributes =
       std::dynamic_pointer_cast<const metadata::attributes::ObjectAttributes>(
-          objInitAttributes_);
+          initializationAttributes_);
 
   if (!ObjectAttributes->getComputeCOMFromShape()) {
     // will be false if the COM is provided; shift by that COM
@@ -63,39 +59,14 @@ bool RigidObject::initialization_LibSpecific() {
   return true;
 }  // RigidObject::initialization_LibSpecific
 
-void RigidObject::setMotionType(MotionType mt) {
+bool RigidObject::setMotionType(MotionType mt) {
   if (mt != MotionType::DYNAMIC) {
-    // can't set DYNAMIC without a dynamics engine.
     objectMotionType_ = mt;
+    return true;
+  } else {
+    return false;  // can't set DYNAMIC without a dynamics engine.
   }
 }
-
-void RigidObject::resetStateFromSceneInstanceAttr() {
-  auto sceneInstanceAttr = getInitObjectInstanceAttr();
-  if (!sceneInstanceAttr) {
-    return;
-  }
-  // set object's location and rotation based on translation and rotation
-  // params specified in instance attributes
-  auto translate = sceneInstanceAttr->getTranslation();
-  auto rotation = sceneInstanceAttr->getRotation();
-  // This was set when object was created, based on whether or not the object
-  // should be centered at COM or via Asset Local origin.
-  if (isCOMCorrected_) {
-    // if default COM correction is set and no object-based override, or if
-    // Object set to correct for COM.
-    translate -= rotation.transformVector(visualNode_->translation());
-  }
-  setTranslation(translate);
-  setRotation(rotation);
-
-  // set object's motion type if different than set value
-  const physics::MotionType attrObjMotionType =
-      sceneInstanceAttr->getMotionType();
-  if (attrObjMotionType != physics::MotionType::UNDEFINED) {
-    this->setMotionType(attrObjMotionType);
-  }
-}  // RigidObject::resetStateFromSceneInstanceAttr
 
 //////////////////
 // VelocityControl

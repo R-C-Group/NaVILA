@@ -1,18 +1,23 @@
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
 import itertools
+import multiprocessing
+import runpy
+import sys
 from os import path as osp
 
 import pytest
 
-# Need to import quaternion library here despite it not being used or else importing
-# habitat_sim below will cause an invalid free() when audio is enabled in sim compilation
-import quaternion  # noqa: F401
 
-import habitat_sim.bindings
-from utils import run_main_subproc
+def run_main(*args):
+    # patch sys.args
+    sys.argv = list(args)
+    target = args[0]
+    # run_path has one difference with invoking Python from command-line:
+    # if the target is a file (rather than a directory), it does not add its
+    # parent directory to sys.path. Thus, importing other modules from the
+    # same directory is broken unless sys.path is patched here.
+    if osp.isfile(target):
+        sys.path.insert(0, osp.dirname(target))
+    runpy.run_path(target, run_name="__main__")
 
 
 def powerset(iterable):
@@ -22,19 +27,38 @@ def powerset(iterable):
     )
 
 
+def run_main_subproc(args):
+    # This test needs to be done in its own process as there is a potentially for
+    # an OpenGL context clash otherwise
+    mp_ctx = multiprocessing.get_context("spawn")
+    proc = mp_ctx.Process(target=run_main, args=args)
+    proc.start()
+    proc.join()
+    assert proc.exitcode == 0
+
+
 @pytest.mark.gfxtest
 @pytest.mark.skipif(
     not osp.exists("data/scene_datasets/habitat-test-scenes/skokloster-castle.glb")
     or not osp.exists("data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"),
     reason="Requires the habitat-test-scenes",
 )
-@pytest.mark.skipif(
-    not habitat_sim.bindings.built_with_bullet,
-    reason="Bullet physics used for validation.",
-)
 @pytest.mark.parametrize(
     "args",
     [
+        ("examples/tutorials/stereo_agent.py", "--no-display"),
+        ("examples/tutorials/lighting_tutorial.py", "--no-show-images"),
+        ("examples/tutorials/new_actions.py",),
+        (
+            "examples/tutorials/nb_python/rigid_object_tutorial.py",
+            "--no-show-video",
+            "--no-make-video",
+        ),
+        (
+            "examples/tutorials/nb_python/ECCV_2020_Navigation.py",
+            "--no-make-video",
+            "--no-display",
+        ),
         (
             "examples/tutorials/nb_python/ECCV_2020_Interactivity.py",
             "--no-make-video",
@@ -45,71 +69,10 @@ def powerset(iterable):
             "--no-make-video",
             "--no-display",
         ),
-    ],
-)
-def test_example_modules_required_bullet(args):
-    run_main_subproc(args)
-
-
-@pytest.mark.gfxtest
-@pytest.mark.skipif(
-    not osp.exists("data/scene_datasets/habitat-test-scenes/skokloster-castle.glb")
-    or not osp.exists("data/scene_datasets/habitat-test-scenes/van-gogh-room.glb"),
-    reason="Requires the habitat-test-scenes",
-)
-@pytest.mark.parametrize(
-    "args",
-    [
-        (
-            "examples/tutorials/nb_python/asset_viewer.py",
-            "--no-show-video",
-            "--no-make-video",
-        ),
-        ("examples/tutorials/stereo_agent.py", "--no-display"),
-        ("examples/tutorials/lighting_tutorial.py", "--no-show-images"),
-        (
-            "examples/tutorials/nb_python/managed_rigid_object_tutorial.py",
-            "--no-show-video",
-            "--no-make-video",
-        ),
-        ("examples/tutorials/new_actions.py",),
-        (
-            "examples/tutorials/nb_python/ECCV_2020_Navigation.py",
-            "--no-make-video",
-            "--no-display",
-        ),
-        (
-            "examples/tutorials/nb_python/replay_tutorial.py",
-            "--no-show-video",
-            "--no-make-video",
-        ),
         ("examples/tutorials/semantic_id_tutorial.py", "--no-show-images"),
-        ("examples/tutorials/async_rendering.py",),
     ],
 )
-def test_example_modules_optional_bullet(args):
-    run_main_subproc(args)
-
-
-@pytest.mark.skipif(
-    not habitat_sim.bindings.built_with_bullet,
-    reason="Bullet physics required for ReplicaCAD Articulated Objects.",
-)
-@pytest.mark.skipif(
-    not osp.exists("data/replica_cad/"),
-    reason="Requires ReplicaCAD dataset.",
-)
-@pytest.mark.parametrize(
-    "args",
-    [
-        (
-            "examples/tutorials/nb_python/ReplicaCAD_quickstart.py",
-            "--no-show-video",
-            "--no-make-video",
-        )
-    ],
-)
-def test_replica_cad_quickstart(args):
+def test_example_modules(args):
     run_main_subproc(args)
 
 
@@ -117,10 +80,6 @@ def test_replica_cad_quickstart(args):
 @pytest.mark.skipif(
     not osp.exists("data/scene_datasets/habitat-test-scenes/skokloster-castle.glb"),
     reason="Requires the habitat-test-scenes",
-)
-@pytest.mark.skipif(
-    not habitat_sim.bindings.built_with_bullet,
-    reason="Bullet physics used for validation.",
 )
 @pytest.mark.parametrize(
     "args",
@@ -138,37 +97,6 @@ def test_replica_cad_quickstart(args):
         )
         if not (("--compute_action_shortest_path" in p) and ("--enable_physics" in p))
     ],
-    ids=str,
 )
-def test_example_script_with_bullet(args):
-    run_main_subproc(args)
-
-
-# Perform tests without physics enabled flag if no bullet, skip these if bullet exists
-@pytest.mark.gfxtest
-@pytest.mark.skipif(
-    not osp.exists("data/scene_datasets/habitat-test-scenes/skokloster-castle.glb"),
-    reason="Requires the habitat-test-scenes",
-)
-@pytest.mark.skipif(
-    habitat_sim.bindings.built_with_bullet,
-    reason="",
-)
-@pytest.mark.parametrize(
-    "args",
-    [
-        ["examples/example.py"] + list(p)
-        for p in powerset(
-            [
-                "--compute_shortest_path",
-                "--compute_action_shortest_path",
-                "--semantic_sensor",
-                "--depth_sensor",
-                "--recompute_navmesh",
-            ]
-        )
-    ],
-    ids=str,
-)
-def test_example_script_no_bullet(args):
+def test_example_script(args):
     run_main_subproc(args)

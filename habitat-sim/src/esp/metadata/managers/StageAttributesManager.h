@@ -1,24 +1,26 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_METADATA_MANAGERS_STAGEATTRIBUTEMANAGER_H_
 #define ESP_METADATA_MANAGERS_STAGEATTRIBUTEMANAGER_H_
 
-#include "AbstractObjectAttributesManager.h"
-#include "esp/metadata/attributes/StageAttributes.h"
+#include "AbstractObjectAttributesManagerBase.h"
 
+#include "ObjectAttributesManager.h"
 #include "PhysicsAttributesManager.h"
 
 namespace esp {
+namespace assets {
+enum class AssetType;
+}  // namespace assets
 namespace metadata {
 namespace managers {
-
 class StageAttributesManager
-    : public AbstractObjectAttributesManager<attributes::StageAttributes,
-                                             ManagedObjectAccess::Copy> {
+    : public AbstractObjectAttributesManager<attributes::StageAttributes> {
  public:
-  explicit StageAttributesManager(
+  StageAttributesManager(
+      ObjectAttributesManager::ptr objectAttributesMgr,
       PhysicsAttributesManager::ptr physicsAttributesManager);
 
   /**
@@ -79,23 +81,16 @@ class StageAttributesManager
   void setValsFromJSONDoc(attributes::StageAttributes::ptr attribs,
                           const io::JsonGenericValue& jsonConfig) override;
 
-  /**
-   * @brief This function will be called to finalize attributes' paths before
-   * registration, moving fully qualified paths to the appropriate hidden
-   * attribute fields. This can also be called without registration to make sure
-   * the paths specified in an attributes are properly configured.
-   * @param attributes The attributes to be filtered.
-   */
-  void finalizeAttrPathsBeforeRegister(
-      const attributes::StageAttributes::ptr& attributes) const override;
-
  protected:
   /**
-   * @brief Create and save default primitive asset-based object templates,
-   * saving their handles as non-deletable default handles.
+   * @brief Check if currently configured primitive asset template library has
+   * passed handle.
+   * @param handle String name of primitive asset attributes desired
+   * @return whether handle exists or not in asset attributes library
    */
-  void createDefaultPrimBasedAttributesTemplates() override;
-
+  bool isValidPrimitiveAttributes(const std::string& handle) override {
+    return objectAttributesMgr_->getObjectLibHasHandle(handle);
+  }
   /**
    * @brief Perform file-name-based attributes initialization. This is to
    * take the place of the AssetInfo::fromPath functionality, and is only
@@ -114,7 +109,7 @@ class StageAttributesManager
       attributes::StageAttributes::ptr attributes,
       bool setFrame,
       const std::string& meshHandle,
-      const std::function<void(AssetType)>& assetTypeSetter) override;
+      std::function<void(int)> assetTypeSetter) override;
   /**
    * @brief Used Internally.  Create and configure newly-created attributes with
    * any default values, before any specific values are set.
@@ -131,22 +126,22 @@ class StageAttributesManager
 
   /**
    * @brief This method will perform any necessary updating that is
-   * AbstractAttributesManager-specific upon template removal, such as removing
-   * a specific template handle from the list of file-based template handles in
-   * ObjectAttributesManager.  This should only be called internally from @ref
-   * esp::core::managedContainers::ManagedContainerBase.
+   * attributesManager-specific upon template removal, such as removing a
+   * specific template handle from the list of file-based template handles in
+   * ObjectAttributesManager.  This should only be called internally.
    *
    * @param templateID the ID of the template to remove
    * @param templateHandle the string key of the attributes desired.
    */
-  void deleteObjectInternalFinalize(
+  void updateObjectHandleLists(
       CORRADE_UNUSED int templateID,
       CORRADE_UNUSED const std::string& templateHandle) override {}
 
   /**
-   * @brief This method will perform any essential updating to the managed
-   * object before registration is performed. If this updating fails,
-   * registration will also fail.
+   * @brief Add a @ref std::shared_ptr<attributesType> object to the
+   * @ref objectLibrary_.  Verify that render and collision handles have been
+   * set properly.  We are doing this since these values can be modified by the
+   * user.
    *
    * @param StageAttributesTemplate The attributes template.
    * @param StageAttributesHandle The key for referencing the template in the
@@ -157,26 +152,10 @@ class StageAttributesManager
    * template.
    */
 
-  core::managedContainers::ManagedObjectPreregistration
-  preRegisterObjectFinalize(
+  int registerObjectFinalize(
       attributes::StageAttributes::ptr StageAttributesTemplate,
       const std::string& StageAttributesHandle,
       bool forceRegistration) override;
-
-  /**
-   * @brief Not required for this manager.
-   *
-   * This method will perform any final manager-related handling after
-   * successfully registering an object.
-   *
-   * See @ref esp::attributes::managers::ObjectAttributesManager for an example.
-   *
-   * @param objectID the ID of the successfully registered managed object
-   * @param objectHandle The name of the managed object
-   */
-  void postRegisterObjectHandling(
-      CORRADE_UNUSED int objectID,
-      CORRADE_UNUSED const std::string& objectHandle) override {}
 
   /**
    * @brief Any scene-attributes-specific resetting that needs to happen on
@@ -184,7 +163,21 @@ class StageAttributesManager
    */
   void resetFinalize() override {}
 
+  /**
+   * @brief This function will assign the appropriately configured function
+   * pointer for the copy constructor as required by
+   * AttributesManager<StageAttributes::ptr>
+   */
+  void buildCtorFuncPtrMaps() override;
+
   // instance vars
+
+  /**
+   * @brief Reference to ObjectAttributesManager to give access to setting
+   * object template library using paths specified in
+   * esp::metadata::attributes::StageAttributes json
+   */
+  ObjectAttributesManager::ptr objectAttributesMgr_ = nullptr;
   /**
    * @brief Reference to PhysicsAttributesManager to give access to default
    * physics manager attributes settings when

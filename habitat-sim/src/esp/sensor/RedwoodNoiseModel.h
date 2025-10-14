@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 //
@@ -6,9 +6,8 @@
 #ifndef ESP_SENSOR_REDWOODNOISEMODEL_H_
 #define ESP_SENSOR_REDWOODNOISEMODEL_H_
 
-#include "esp/core/Esp.h"
-#include "esp/core/EspEigen.h"
-#include "esp/core/Random.h"
+#include "esp/core/esp.h"
+#include "esp/core/random.h"
 
 #include "RedwoodNoiseModel.cuh"
 
@@ -78,7 +77,7 @@ struct RedwoodNoiseModelGPUImpl {
   ~RedwoodNoiseModelGPUImpl();
 
  private:
-  const int gpuDeviceId_, maxThreadsPerBlock_, warpSize_;
+  const int gpuDeviceId_;
   const float noiseMultiplier_;
   float* devModel_ = nullptr;
   impl::CurandStates* curandStates_ = nullptr;

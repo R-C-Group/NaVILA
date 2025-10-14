@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -13,21 +13,21 @@ namespace {
 
 struct CudaDeviceContext {
   explicit CudaDeviceContext(const int deviceId) {
-    cudaGetDevice(&currentDevice_);
-    if (deviceId != currentDevice_) {
+    cudaGetDevice(&currentDevice);
+    if (deviceId != currentDevice) {
       cudaSetDevice(deviceId);
-      setDevice_ = true;
+      setDevice = true;
     }
   }
 
   ~CudaDeviceContext() {
-    if (setDevice_)
-      cudaSetDevice(currentDevice_);
+    if (setDevice)
+      cudaSetDevice(currentDevice);
   }
 
  private:
-  bool setDevice_ = false;
-  int currentDevice_ = -1;
+  bool setDevice = false;
+  int currentDevice = -1;
 };
 
 }  // namespace
@@ -36,23 +36,7 @@ RedwoodNoiseModelGPUImpl::RedwoodNoiseModelGPUImpl(
     const Eigen::Ref<const Eigen::RowMatrixXf> model,
     const int gpuDeviceId,
     const float noiseMultiplier)
-    : gpuDeviceId_{gpuDeviceId},
-      maxThreadsPerBlock_{[gpuDeviceId]() -> int {
-        int maxThreadsPerBlock;
-        cudaDeviceGetAttribute(&maxThreadsPerBlock,
-                               cudaDeviceAttr::cudaDevAttrMaxThreadsPerBlock,
-                               gpuDeviceId);
-
-        return maxThreadsPerBlock;
-      }()},
-      warpSize_{[gpuDeviceId]() -> int {
-        int warpSize;
-        cudaDeviceGetAttribute(&warpSize, cudaDeviceAttr::cudaDevAttrWarpSize,
-                               gpuDeviceId);
-
-        return warpSize;
-      }()},
-      noiseMultiplier_{noiseMultiplier} {
+    : gpuDeviceId_{gpuDeviceId}, noiseMultiplier_{noiseMultiplier} {
   CudaDeviceContext ctx{gpuDeviceId_};
 
   cudaMalloc(&devModel_, model.rows() * model.cols() * sizeof(float));
@@ -73,13 +57,11 @@ RedwoodNoiseModelGPUImpl::~RedwoodNoiseModelGPUImpl() {
 Eigen::RowMatrixXf RedwoodNoiseModelGPUImpl::simulateFromCPU(
     const Eigen::Ref<const Eigen::RowMatrixXf> depth) {
   CudaDeviceContext ctx{gpuDeviceId_};
-  const auto numRows = depth.rows();
-  const auto numCols = depth.cols();
-  Eigen::RowMatrixXf noisyDepth(numRows, numCols);
 
-  impl::simulateFromCPU(maxThreadsPerBlock_, warpSize_, depth.data(), numRows,
-                        numCols, devModel_, curandStates_, noiseMultiplier_,
-                        noisyDepth.data());
+  Eigen::RowMatrixXf noisyDepth(depth.rows(), depth.cols());
+
+  impl::simulateFromCPU(depth.data(), depth.rows(), depth.cols(), devModel_,
+                        curandStates_, noiseMultiplier_, noisyDepth.data());
   return noisyDepth;
 }
 
@@ -88,9 +70,8 @@ void RedwoodNoiseModelGPUImpl::simulateFromGPU(const float* devDepth,
                                                const int cols,
                                                float* devNoisyDepth) {
   CudaDeviceContext ctx{gpuDeviceId_};
-  impl::simulateFromGPU(maxThreadsPerBlock_, warpSize_, devDepth, rows, cols,
-                        devModel_, curandStates_, noiseMultiplier_,
-                        devNoisyDepth);
+  impl::simulateFromGPU(devDepth, rows, cols, devModel_, curandStates_,
+                        noiseMultiplier_, devNoisyDepth);
 }
 
 }  // namespace sensor

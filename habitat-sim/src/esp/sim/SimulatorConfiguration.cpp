@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -8,9 +8,11 @@ namespace esp {
 namespace sim {
 bool operator==(const SimulatorConfiguration& a,
                 const SimulatorConfiguration& b) {
-  return a.activeSceneName == b.activeSceneName &&
+  return a.activeSceneName.compare(b.activeSceneName) == 0 &&
          a.defaultAgentId == b.defaultAgentId &&
          a.gpuDeviceId == b.gpuDeviceId && a.randomSeed == b.randomSeed &&
+         a.defaultCameraUuid.compare(b.defaultCameraUuid) == 0 &&
+         a.compressTextures == b.compressTextures &&
          a.createRenderer == b.createRenderer &&
          a.allowSliding == b.allowSliding &&
          a.frustumCulling == b.frustumCulling &&
@@ -20,14 +22,10 @@ bool operator==(const SimulatorConfiguration& a,
          a.forceSeparateSemanticSceneGraph ==
              b.forceSeparateSemanticSceneGraph &&
          a.requiresTextures == b.requiresTextures &&
-         a.leaveContextWithBackgroundRenderer ==
-             b.leaveContextWithBackgroundRenderer &&
-         a.useSemanticTexturesIfFound == b.useSemanticTexturesIfFound &&
-         a.sceneDatasetConfigFile == b.sceneDatasetConfigFile &&
-         a.physicsConfigFile == b.physicsConfigFile &&
+         a.sceneDatasetConfigFile.compare(b.sceneDatasetConfigFile) == 0 &&
+         a.physicsConfigFile.compare(b.physicsConfigFile) == 0 &&
          a.overrideSceneLightDefaults == b.overrideSceneLightDefaults &&
-         a.sceneLightSetupKey == b.sceneLightSetupKey &&
-         a.enableHBAO == b.enableHBAO && a.navMeshSettings == b.navMeshSettings;
+         a.sceneLightSetup.compare(b.sceneLightSetup) == 0;
 }
 
 bool operator!=(const SimulatorConfiguration& a,

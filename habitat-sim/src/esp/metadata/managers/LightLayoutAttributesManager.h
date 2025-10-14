@@ -1,13 +1,12 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_METADATA_MANAGERS_LIGHTATTRIBUTEMANAGER_H_
 #define ESP_METADATA_MANAGERS_LIGHTATTRIBUTEMANAGER_H_
 
-#include "AbstractAttributesManager.h"
+#include "AttributesManagerBase.h"
 
-#include "esp/gfx/LightSetup.h"
 #include "esp/metadata/attributes/LightLayoutAttributes.h"
 
 namespace Cr = Corrade;
@@ -15,20 +14,14 @@ namespace Cr = Corrade;
 namespace esp {
 namespace metadata {
 namespace managers {
-
 class LightLayoutAttributesManager
-    : public AbstractAttributesManager<attributes::LightLayoutAttributes,
-                                       ManagedObjectAccess::Copy> {
+    : public AttributesManager<attributes::LightLayoutAttributes> {
  public:
   LightLayoutAttributesManager()
-      : AbstractAttributesManager<attributes::LightLayoutAttributes,
-                                  ManagedObjectAccess::Copy>::
-            AbstractAttributesManager("Lighting Layout",
-                                      "lighting_config.json") {
-    // build this manager's copy constructor map
-    this->copyConstructorMap_["LightLayoutAttributes"] =
-        &LightLayoutAttributesManager::createObjCopyCtorMapEntry<
-            attributes::LightLayoutAttributes>;
+      : AttributesManager<attributes::LightLayoutAttributes>::AttributesManager(
+            "Lighting Layout",
+            "lighting_config.json") {
+    buildCtorFuncPtrMaps();
   }
 
   /**
@@ -43,7 +36,7 @@ class LightLayoutAttributesManager
    * will be overwritten with the newly created one if registerTemplate is true.
    *
    * @param lightConfigName The configuration file to parse, or the name of the
-   * single light's attributes to create.
+   * single light's attributs to create.
    * @param registerTemplate whether to add this template to the library.
    * Defaults to false - overridden if @p lightConfigName is a JSON file.
    * @return a reference to the created light attributes.
@@ -71,40 +64,17 @@ class LightLayoutAttributesManager
       const attributes::LightInstanceAttributes::ptr& lightInstAttribs,
       const io::JsonGenericValue& jsonConfig);
 
-  /**
-   * @brief This will create a @ref gfx::LightSetup object based on the
-   * LightLayoutAttributes referenced by the passed name.
-   * @param lightConfigName the name of the LightLayoutAttributes to be used to
-   * create the LightSetup.
-   * @return The lightSetup defined by the attributes, or an empty LightSetup.
-   */
-  gfx::LightSetup createLightSetupFromAttributes(
-      const std::string& lightConfigName);
-
-  /**
-   * @brief Not required for this manager.
-   *
-   * This function will be called to finalize attributes' paths before
-   * registration, moving fully qualified paths to the appropriate hidden
-   * attribute fields. This can also be called without registration to make sure
-   * the paths specified in an attributes are properly configured.
-   * @param attributes The attributes to be filtered.
-   */
-  void finalizeAttrPathsBeforeRegister(
-      CORRADE_UNUSED const attributes::LightLayoutAttributes::ptr& attributes)
-      const override {}
-
  protected:
   /**
-   * @brief Used Internally.  Create and configure newly-created attributes
-   * with any default values, before any specific values are set.
+   * @brief Used Internally.  Create and configure newly-created attributes with
+   * any default values, before any specific values are set.
    *
    * @param handleName handle name to be assigned to attributes\
-   * @param builtFromConfig whether this LightLayoutAttributes is being
-   * built from a config file, or from some other source (i.e. handleName
-   * contains config file name)
-   * @return Newly created but unregistered LightLayoutAttributes pointer,
-   * with only default values set.
+   * @param builtFromConfig whether this LightLayoutAttributes is being built
+   * from a config file, or from some other source (i.e. handleName contains
+   * config file name)
+   * @return Newly created but unregistered LightLayoutAttributes pointer, with
+   * only default values set.
    */
   attributes::LightLayoutAttributes::ptr initNewObjectInternal(
       const std::string& handleName,
@@ -112,60 +82,58 @@ class LightLayoutAttributesManager
 
   /**
    * @brief This method will perform any necessary updating that is
-   * AbstractAttributesManager-specific upon template removal.  This should only
-   * be
-   * called from @ref esp::core::managedContainers::ManagedContainerBase.
+   * attributesManager-specific upon template removal.
    *
    * @param templateID the ID of the template to remove
    * @param templateHandle the string key of the attributes desired.
    */
-  void deleteObjectInternalFinalize(
+  void updateObjectHandleLists(
       CORRADE_UNUSED int templateID,
       CORRADE_UNUSED const std::string& templateHandle) override {}
 
   /**
-   * @brief Not required for this manager.
+   * @brief Add a copy of the @ref
+   * esp::metadata::attributes::LightLayoutAttributes shared_ptr object to
+   * the @ref objectLibrary_.
    *
-   * This method will perform any essential updating to the managed object
-   * before registration is performed. If this updating fails, registration will
-   * also fail.
-   * @param object the managed object to be registered
-   * @param objectHandle the name to register the managed object with.
-   * Expected to be valid.
-   * @param forceRegistration Should register object even if conditional
-   * registration checks fail.
-   * @return Whether the preregistration has succeeded and what handle to use to
-   * register the object if it has.
+   * @param LightLayoutAttributesTemplate The attributes template.
+   * @param LightLayoutAttributesHandle The key for referencing the template in
+   * the
+   * @ref objectLibrary_.
+   * @return The index in the @ref objectLibrary_ of object
+   * template.
    */
-  core::managedContainers::ManagedObjectPreregistration
-  preRegisterObjectFinalize(
-      CORRADE_UNUSED attributes::LightLayoutAttributes::ptr object,
-      CORRADE_UNUSED const std::string& objectHandle,
-      CORRADE_UNUSED bool forceRegistration) override {
-    // No pre-registration conditioning performed
-    return core::managedContainers::ManagedObjectPreregistration::Success;
-  }
-
-  /**
-   * @brief Not required for this manager.
-   *
-   * This method will perform any final manager-related handling after
-   * successfully registering an object.
-   *
-   * See @ref esp::attributes::managers::ObjectAttributesManager for an example.
-   *
-   * @param objectID the ID of the successfully registered managed object
-   * @param objectHandle The name of the managed object
-   */
-  void postRegisterObjectHandling(
-      CORRADE_UNUSED int objectID,
-      CORRADE_UNUSED const std::string& objectHandle) override {}
+  int registerObjectFinalize(
+      attributes::LightLayoutAttributes::ptr LightLayoutAttributesTemplate,
+      const std::string& LightLayoutAttributesHandle,
+      CORRADE_UNUSED bool forceRegistration) override;
 
   /**
    * @brief Any lights-attributes-specific resetting that needs to happen on
    * reset.
    */
   void resetFinalize() override {}
+
+  /**
+   * @brief This function will assign the appropriately configured function
+   * pointer for the copy constructor as required by
+   * AttributesManager<LightLayoutAttributes::ptr>
+   */
+  void buildCtorFuncPtrMaps() override {
+    this->copyConstructorMap_["LightLayoutAttributes"] =
+        &LightLayoutAttributesManager::createObjectCopy<
+            attributes::LightLayoutAttributes>;
+  }  // LightLayoutAttributesManager::buildCtorFuncPtrMaps
+
+  /**
+   * @brief Light Attributes has no reason to check this value
+   * @param handle String name of primitive asset attributes desired
+   * @return whether handle exists or not in asset attributes library
+   */
+  bool isValidPrimitiveAttributes(
+      CORRADE_UNUSED const std::string& handle) override {
+    return false;
+  }
 
  public:
   ESP_SMART_POINTERS(LightLayoutAttributesManager)

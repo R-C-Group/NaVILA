@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -30,12 +30,14 @@ class BulletRigidStage : public BulletBase, public RigidStage {
   /**
    * @brief Destructor cleans up simulation structures for the stage object.
    */
-  ~BulletRigidStage() override;
+  virtual ~BulletRigidStage();
 
  private:
   /**
    * @brief Finalize the initialization of this @ref RigidScene
    * geometry.  This holds bullet-specific functionality for stages.
+   * @param resMgr Reference to resource manager, to access relevant components
+   * pertaining to the stage object
    * @return true if initialized successfully, false otherwise.
    */
   bool initialization_LibSpecific() override;
@@ -56,20 +58,15 @@ class BulletRigidStage : public BulletBase, public RigidStage {
 
   /**
    * @brief Adds static stage collision objects to the simulation world after
-   * contracting them if necessary.
+   * contructing them if necessary.
    */
   void constructAndAddCollisionObjects();
-
-  /**
-   * @brief used with BulletCollisionHelper
-   */
-  std::string getCollisionDebugName(int subpartId);
 
   /**
    * @brief Set the stage to collidable or not by adding/removing the static
    * collision shapes from the simulation world.
    */
-  void setCollidable(bool collidable) override;
+  bool setCollidable(bool collidable) override;
 
  public:
   /**
@@ -77,33 +74,33 @@ class BulletRigidStage : public BulletBase, public RigidStage {
    * the rigid body in its local space. See @ref btCompoundShape::getAabb.
    * @return The Aabb.
    */
-  Magnum::Range3D getCollisionShapeAabb() const override;
+  virtual const Magnum::Range3D getCollisionShapeAabb() const override;
 
   /** @brief Get the scalar friction coefficient of the stage object. Only
    * used for dervied dynamic implementations of @ref RigidStage.
    * @return The scalar friction coefficient of the stage object.
    */
-  double getFrictionCoefficient() const override;
+  virtual double getFrictionCoefficient() const override;
 
   /** @brief Get the scalar coefficient of restitution  of the stage object.
    * Only used for dervied dynamic implementations of @ref RigidStage.
    * @return The scalar coefficient of restitution  of the stage object.
    */
-  double getRestitutionCoefficient() const override;
+  virtual double getRestitutionCoefficient() const override;
 
   /** @brief Set the scalar friction coefficient of the stage object.
    * See @ref btCollisionObject::setFriction.
    * @param frictionCoefficient The new scalar friction coefficient of the
    * stage object.
    */
-  void setFrictionCoefficient(double frictionCoefficient) override;
+  void setFrictionCoefficient(const double frictionCoefficient) override;
 
   /** @brief Set the scalar coefficient of restitution of the stage object.
    * See @ref btCollisionObject::setRestitution.
    * @param restitutionCoefficient The new scalar coefficient of restitution of
    * the stage object.
    */
-  void setRestitutionCoefficient(double restitutionCoefficient) override;
+  void setRestitutionCoefficient(const double restitutionCoefficient) override;
 
  private:
   // === Physical stage ===

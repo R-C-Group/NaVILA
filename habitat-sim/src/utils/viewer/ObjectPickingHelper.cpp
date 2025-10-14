@@ -1,7 +1,3 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
-// This source code is licensed under the MIT license found in the
-// LICENSE file in the root directory of this source tree.
-
 #include "ObjectPickingHelper.h"
 #include <Corrade/Containers/StridedArrayView.h>
 #include <Corrade/Utility/Assert.h>
@@ -11,8 +7,8 @@
 #include <Magnum/Image.h>
 #include <Magnum/Magnum.h>
 #include <Magnum/PixelFormat.h>
-#include <Magnum/Shaders/GenericGL.h>
-#include "esp/gfx/DrawableConfiguration.h"
+#include <Magnum/Shaders/Generic.h>
+#include <Magnum/Shaders/MeshVisualizer.h>
 
 namespace Cr = Corrade;
 namespace Mn = Magnum;
@@ -65,9 +61,9 @@ ObjectPickingHelper& ObjectPickingHelper::prepareToDraw() {
 }
 
 ObjectPickingHelper& ObjectPickingHelper::mapForDraw() {
-  selectionFramebuffer_.mapForDraw({{Mn::Shaders::GenericGL3D::ColorOutput,
+  selectionFramebuffer_.mapForDraw({{Mn::Shaders::Generic3D::ColorOutput,
                                      Mn::GL::Framebuffer::DrawAttachment::None},
-                                    {Mn::Shaders::GenericGL3D::ObjectIdOutput,
+                                    {Mn::Shaders::Generic3D::ObjectIdOutput,
                                      Mn::GL::Framebuffer::ColorAttachment{1}}});
   return *this;
 }
@@ -120,21 +116,11 @@ void ObjectPickingHelper::createPickedObjectVisualizer(
     return;
   }
 
-  // default configuration to pass pickedObjectDrawbles_
-  esp::gfx::DrawableConfiguration cfg{
-      esp::NO_LIGHT_KEY,
-      esp::WHITE_MATERIAL_KEY,
-      esp::metadata::attributes::ObjectInstanceShaderType::Unspecified,
-      &pickedObjectDrawbles_,
-      nullptr,
-      nullptr,
-      nullptr};
-
   // magnum scene graph will handle the garbage collection even we did not
   // recycle it by the end of the simulation
   meshVisualizerDrawable_ = new esp::gfx::MeshVisualizerDrawable(
       static_cast<esp::scene::SceneNode&>(pickedObject->object()), shader_,
-      pickedObject->getVisualizerMesh(), cfg);
+      pickedObject->getVisualizerMesh(), &pickedObjectDrawbles_);
 
   return;
 }

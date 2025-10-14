@@ -1,13 +1,9 @@
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
+# Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
 
 import numpy as np
-
-# Need to import quaternion library here despite it not being used or else importing
-# habitat_sim below will cause an invalid free() when audio is enabled in sim compilation
-import quaternion  # noqa: F401
 
 import habitat_sim
 
@@ -19,7 +15,7 @@ def _render(sim, display, depth=False):
     for _ in range(100):
         # Just spin in a circle
         obs = sim.step("turn_right")
-        # Put the two stereo observations next to each other
+        # Put the two stereo observations next to eachother
         stereo_pair = np.concatenate([obs["left_sensor"], obs["right_sensor"]], axis=1)
 
         # If it is a depth pair, manually normalize into [0, 1]
@@ -56,7 +52,7 @@ def main(display=True):
     )
 
     # First, let's create a stereo RGB agent
-    left_rgb_sensor = habitat_sim.bindings.CameraSensorSpec()
+    left_rgb_sensor = habitat_sim.SensorSpec()
     # Give it the uuid of left_sensor, this will also be how we
     # index the observations to retrieve the rendering from this sensor
     left_rgb_sensor.uuid = "left_sensor"
@@ -66,7 +62,7 @@ def main(display=True):
     left_rgb_sensor.position = 1.5 * habitat_sim.geo.UP + 0.25 * habitat_sim.geo.LEFT
 
     # Same deal with the right sensor
-    right_rgb_sensor = habitat_sim.CameraSensorSpec()
+    right_rgb_sensor = habitat_sim.SensorSpec()
     right_rgb_sensor.uuid = "right_sensor"
     right_rgb_sensor.resolution = [512, 512]
     # The right RGB sensor will be 1.5 meters off the ground
@@ -74,7 +70,7 @@ def main(display=True):
     right_rgb_sensor.position = 1.5 * habitat_sim.geo.UP + 0.25 * habitat_sim.geo.RIGHT
 
     agent_config = habitat_sim.AgentConfiguration()
-    # Now we simply set the agent's list of sensor specs to be the two specs for our two sensors
+    # Now we simly set the agent's list of sensor specs to be the two specs for our two sensors
     agent_config.sensor_specifications = [left_rgb_sensor, right_rgb_sensor]
 
     sim = habitat_sim.Simulator(habitat_sim.Configuration(backend_cfg, [agent_config]))
@@ -83,14 +79,14 @@ def main(display=True):
     sim.close()
 
     # Now let's do the exact same thing but for a depth camera stereo pair!
-    left_depth_sensor = habitat_sim.CameraSensorSpec()
+    left_depth_sensor = habitat_sim.SensorSpec()
     left_depth_sensor.uuid = "left_sensor"
     left_depth_sensor.resolution = [512, 512]
     left_depth_sensor.position = 1.5 * habitat_sim.geo.UP + 0.25 * habitat_sim.geo.LEFT
     # The only difference is that we set the sensor type to DEPTH
     left_depth_sensor.sensor_type = habitat_sim.SensorType.DEPTH
 
-    right_depth_sensor = habitat_sim.CameraSensorSpec()
+    right_depth_sensor = habitat_sim.SensorSpec()
     right_depth_sensor.uuid = "right_sensor"
     right_depth_sensor.resolution = [512, 512]
     right_depth_sensor.position = (

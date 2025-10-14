@@ -1,11 +1,11 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_METADATA_ATTRIBUTES_PRIMITIVEASSETATTRIBUTES_H_
 #define ESP_METADATA_ATTRIBUTES_PRIMITIVEASSETATTRIBUTES_H_
 
-#include "AbstractAttributes.h"
+#include "AttributesBase.h"
 
 namespace esp {
 namespace metadata {
@@ -29,76 +29,69 @@ class AbstractPrimitiveAttributes : public AbstractAttributes {
     setPrimObjType(primObjType);
     setPrimObjClassName(primObjClassName);
     setFileDirectory("none");
-    // initialize so empty values are present
-    set("halfLength", 0.0);
-    set("segments", 0);
-    set("rings", 0);
+
     if (!isWireframe) {  // solid
       // do not call setters since they call buildHandle, which does not
       // exist - is abstract in base class
-      set("textureCoordinates", false);
-      set("tangents", false);
+      setBool("textureCoordinates", false);
+      setBool("tangents", false);
     }
 
   }  // ctor
 
   // necessary since abstract
-  ~AbstractPrimitiveAttributes() override = default;
+  virtual ~AbstractPrimitiveAttributes() = default;
 
   // handle is set internally based on attributes configuration
   // setting externally is prohibited
   void setHandle(const std::string&) override {}
 
-  bool getIsWireframe() const { return get<bool>("isWireframe"); }
+  bool getIsWireframe() const { return getBool("isWireframe"); }
 
   // only solid prims can use texture coords
   void setUseTextureCoords(bool useTextureCoords) {
     if (!getIsWireframe()) {  // check if solid
-      set("textureCoordinates", useTextureCoords);
+      setBool("textureCoordinates", useTextureCoords);
       buildHandle();  // build handle based on config
     }
   }
-  bool getUseTextureCoords() const { return get<bool>("textureCoordinates"); }
+  bool getUseTextureCoords() const { return getBool("textureCoordinates"); }
 
   // only solid prims have option to use tangents
   void setUseTangents(bool tangents) {
     if (!getIsWireframe()) {  // check if solid
-      set("tangents", tangents);
+      setBool("tangents", tangents);
       buildHandle();  // build handle based on config
     }
   }
-  bool getUseTangents() const { return get<bool>("tangents"); }
+  bool getUseTangents() const { return getBool("tangents"); }
 
   // only circular prims set number of rings - NOTE : capsule sets rings
   // separately for hemispheres and cylinder
   // set virtual so cannot be deleted in capsule attributes
   void setNumRings(int rings) {
-    set("rings", rings);
+    setInt("rings", rings);
     buildHandle();  // build handle based on config
   }
-  int getNumRings() const { return get<int>("rings"); }
+  int getNumRings() const { return getInt("rings"); }
 
   void setNumSegments(int segments) {
-    set("segments", segments);
+    setInt("segments", segments);
     buildHandle();  // build handle based on config
   }
-  int getNumSegments() const { return get<int>("segments"); }
+  int getNumSegments() const { return getInt("segments"); }
   // capsule, cone and cylinder use halfLength
   void setHalfLength(double halfLength) {
-    set("halfLength", halfLength);
+    setDouble("halfLength", halfLength);
     buildHandle();
   }
-  double getHalfLength() const { return get<double>("halfLength"); }
+  double getHalfLength() const { return getDouble("halfLength"); }
 
   std::string getPrimObjClassName() const {
-    return get<std::string>("primObjClassName");
+    return getString("primObjClassName");
   }
 
-  /**
-   * @brief The integer representation of the @ref esp::metadata::PrimObjTypes
-   * this primitive represents,
-   */
-  int getPrimObjType() const { return get<int>("primObjType"); }
+  int getPrimObjType() const { return getInt("primObjType"); }
   /**
    * @brief This will determine if the stated template has the required
    * quantities needed to instantiate a primitive properly of desired type.
@@ -117,51 +110,10 @@ class AbstractPrimitiveAttributes : public AbstractAttributes {
   void buildHandle() {
     std::ostringstream oHndlStrm;
     oHndlStrm << getPrimObjClassName() << buildHandleDetail();
-    set("handle", oHndlStrm.str());
+    setString("handle", oHndlStrm.str());
   }
-
-  /**
-   * @brief This will parse the passed candidate object template handle, treated
-   * as a configuration string, and populate the appropriate values.
-   * @param configString The configuration string to parse.
-   * @return Whether the parsing has succeeded or not (might fail with
-   * inappropriate formatting for object type.)
-   */
-  bool parseStringIntoConfig(const std::string& configString) {
-    bool success = parseStringIntoConfigDetail(configString);
-    if (success) {
-      // if parsed successfully, make sure the object's handle contains the
-      // original config string
-      return (this->getHandle().find(configString) != std::string::npos);
-    }
-    return success;
-  }
-
-  /**
-   * @brief PrimitiveAssetAttributes handles are already simplified, and embed
-   * no path info.
-   */
-  std::string getSimplifiedHandle() const override { return getHandle(); }
 
  protected:
-  /**
-   * @brief Retrieve a comma-separated string holding the header values for the
-   * info returned for this managed object, type-specific.
-   */
-  std::string getObjectInfoHeaderInternal() const override {
-    // Handle already encodes all relevant info
-    return ",";
-  }
-
-  /**
-   * @brief Retrieve a comma-separated informational string about the contents
-   * of this managed object.
-   */
-  std::string getObjectInfoInternal() const override {
-    // Handle already encodes all relevant info
-    return ", ";
-  }
-
   /**
    * @brief Verifies that val is larger than, and a multiple of, divisor
    * div
@@ -178,71 +130,20 @@ class AbstractPrimitiveAttributes : public AbstractAttributes {
   std::string getBoolDispStr(bool val) const {
     return (val ? "true" : "false");
   }
-
-  // helper for parseStringIntoConfig process
-  std::string getValueForConfigKey(const std::string& key,
-                                   const std::string& configStr) {
-    std::size_t keyLoc = configStr.find(key);
-    if (keyLoc == std::string::npos) {
-      ESP_WARNING() << "Key" << key << "not found in configStr" << configStr
-                    << ", so retrieving empty string.";
-      return "";
-    }
-    std::size_t keyLen = key.length(), keyEnd = keyLoc + keyLen;
-    return configStr.substr(keyEnd, configStr.find('_', keyEnd) - keyEnd);
-  }
-  bool getBoolForConfigKey(const std::string& key,
-                           const std::string& configStr) {
-    std::string res = getValueForConfigKey(key, configStr);
-    return (res.find("true") != std::string::npos);
-  }
-
-  bool setIntFromConfigKey(const std::string& key,
-                           const std::string& configStr,
-                           const std::function<void(int)>& setter) {
-    const std::string conv = getValueForConfigKey(key, configStr);
-    try {
-      setter(stoi(conv));
-      return true;
-    } catch (...) {
-      ESP_WARNING() << "Failed due to -" << conv << "- value for key -" << key
-                    << "- in format string -" << configStr
-                    << "- not being recognized as an int.";
-      return false;
-    }
-  }
-
-  bool setDoubleFromConfigKey(const std::string& key,
-                              const std::string& configStr,
-                              const std::function<void(double)>& setter) {
-    const std::string conv = getValueForConfigKey(key, configStr);
-    try {
-      setter(stod(conv));
-      return true;
-    } catch (...) {
-      ESP_WARNING() << "Failed due to -" << conv << "- value for key -" << key
-                    << "- in format string -" << configStr
-                    << "- not being recognized as a double.";
-      return false;
-    }
-  }
-
   virtual std::string buildHandleDetail() = 0;
-
-  virtual bool parseStringIntoConfigDetail(const std::string& configString) = 0;
 
  private:
   // Should never change, only set by ctor
-  void setPrimObjClassName(const std::string& primObjClassName) {
-    set("primObjClassName", primObjClassName);
+  void setPrimObjClassName(std::string primObjClassName) {
+    setString("primObjClassName", primObjClassName);
   }
 
   // Should never change, only set by ctor
-  void setPrimObjType(int primObjType) { set("primObjType", primObjType); }
+  void setPrimObjType(int primObjType) { setInt("primObjType", primObjType); }
 
   // not used to construct prim mesh, so setting this does not require
   // modification to handle.  Should never change, only set by ctor
-  void setIsWireframe(bool isWireframe) { set("isWireframe", isWireframe); }
+  void setIsWireframe(bool isWireframe) { setBool("isWireframe", isWireframe); }
 
  public:
   ESP_SMART_POINTERS(AbstractPrimitiveAttributes)
@@ -256,22 +157,22 @@ class CapsulePrimitiveAttributes : public AbstractPrimitiveAttributes {
                              const std::string& primObjClassName);
 
   void setHemisphereRings(int hemisphereRings) {
-    set("hemisphereRings", hemisphereRings);
+    setInt("hemisphereRings", hemisphereRings);
     buildHandle();  // build handle based on config
   }
-  int getHemisphereRings() const { return get<int>("hemisphereRings"); }
+  int getHemisphereRings() const { return getInt("hemisphereRings"); }
 
   void setCylinderRings(int cylinderRings) {
-    set("cylinderRings", cylinderRings);
+    setInt("cylinderRings", cylinderRings);
     buildHandle();  // build handle based on config
   }
-  int getCylinderRings() const { return get<int>("cylinderRings"); }
+  int getCylinderRings() const { return getInt("cylinderRings"); }
 
   /**
    * @brief This will determine if the stated template has the required
    * quantities needed to instantiate a primitive properly of desired type
-   * @return whether or not the template holds valid data for desired
-   * primitive type
+   * @return whether or not the template holds valid data for desired primitive
+   * type
    */
   bool isValidTemplate() override {
     bool wfCheck =
@@ -295,8 +196,6 @@ class CapsulePrimitiveAttributes : public AbstractPrimitiveAttributes {
     return oHndlStrm.str();
   }  // buildHandleDetail
 
-  bool parseStringIntoConfigDetail(const std::string& configString) override;
-
  public:
   ESP_SMART_POINTERS(CapsulePrimitiveAttributes)
 };  // class CapsulePrimitiveAttributes
@@ -309,16 +208,16 @@ class ConePrimitiveAttributes : public AbstractPrimitiveAttributes {
 
   // only solid cones can have end capped
   void setCapEnd(bool capEnd) {
-    set("capEnd", capEnd);
+    setBool("capEnd", capEnd);
     buildHandle();  // build handle based on config
   }
-  bool getCapEnd() const { return get<bool>("capEnd"); }
+  bool getCapEnd() const { return getBool("capEnd"); }
 
   /**
    * @brief This will determine if the stated template has the required
    * quantities needed to instantiate a primitive properly of desired type
-   * @return whether or not the template holds valid data for desired
-   * primitive type
+   * @return whether or not the template holds valid data for desired primitive
+   * type
    */
   bool isValidTemplate() override {
     bool wfCheck =
@@ -342,8 +241,6 @@ class ConePrimitiveAttributes : public AbstractPrimitiveAttributes {
     return oHndlStrm.str();
   }  // buildHandleDetail
 
-  bool parseStringIntoConfigDetail(const std::string& configString) override;
-
  public:
   ESP_SMART_POINTERS(ConePrimitiveAttributes)
 };  // class ConePrimitiveAttributes
@@ -362,20 +259,15 @@ class CubePrimitiveAttributes : public AbstractPrimitiveAttributes {
 
   /**
    * @brief This will determine if the stated template has the required
-   * quantities needed to instantiate a primitive properly of desired type.
-   * Cube primitives require no values and so this attributes is always valid.
-   * @return whether or not the template holds valid data for desired
-   * primitive type
+   * quantities needed to instantiate a primitive properly of desired type. Cube
+   * primitives require no values and so this attributes is always valid.
+   * @return whether or not the template holds valid data for desired primitive
+   * type
    */
   bool isValidTemplate() override { return true; }
 
  protected:
   std::string buildHandleDetail() override { return ""; }
-
-  bool parseStringIntoConfigDetail(
-      CORRADE_UNUSED const std::string& configString) override {
-    return true;
-  }
 
  public:
   ESP_SMART_POINTERS(CubePrimitiveAttributes)
@@ -389,16 +281,16 @@ class CylinderPrimitiveAttributes : public AbstractPrimitiveAttributes {
 
   // only solid culinders can have ends capped
   void setCapEnds(bool capEnds) {
-    set("capEnds", capEnds);
+    setBool("capEnds", capEnds);
     buildHandle();  // build handle based on config
   }
-  bool getCapEnds() const { return get<bool>("capEnds"); }
+  bool getCapEnds() const { return getBool("capEnds"); }
 
   /**
    * @brief This will determine if the stated template has the required
    * quantities needed to instantiate a primitive properly of desired type
-   * @return whether or not the template holds valid data for desired
-   * primitive type
+   * @return whether or not the template holds valid data for desired primitive
+   * type
    */
   bool isValidTemplate() override {
     bool wfCheck =
@@ -420,8 +312,6 @@ class CylinderPrimitiveAttributes : public AbstractPrimitiveAttributes {
     return oHndlStrm.str();
   }  // buildHandleDetail
 
-  bool parseStringIntoConfigDetail(const std::string& configString) override;
-
  public:
   ESP_SMART_POINTERS(CylinderPrimitiveAttributes)
 };  // class CylinderPrimitiveAttributes
@@ -438,23 +328,23 @@ class IcospherePrimitiveAttributes : public AbstractPrimitiveAttributes {
                                     "IcospherePrimitiveAttributes") {
     // setting manually because wireframe icosphere does not currently support
     // subdiv > 1 and setSubdivisions checks for wireframe
-    set("subdivisions", 1);
+    setInt("subdivisions", 1);
     buildHandle();  // build handle based on config
   }
   // only solid icospheres will support subdivision - wireframes default to 1
   void setSubdivisions(int subdivisions) {
     if (!getIsWireframe()) {
-      set("subdivisions", subdivisions);
+      setInt("subdivisions", subdivisions);
       buildHandle();  // build handle based on config
     }
   }
-  int getSubdivisions() const { return get<int>("subdivisions"); }
+  int getSubdivisions() const { return getInt("subdivisions"); }
 
   /**
    * @brief This will determine if the stated template has the required
    * quantities needed to instantiate a primitive properly of desired type
-   * @return whether or not the template holds valid data for desired
-   * primitive type
+   * @return whether or not the template holds valid data for desired primitive
+   * type
    */
   bool isValidTemplate() override {
     return (getIsWireframe() || (!getIsWireframe() && getSubdivisions() >= 0));
@@ -469,13 +359,6 @@ class IcospherePrimitiveAttributes : public AbstractPrimitiveAttributes {
     return oHndlStrm.str();
   }  // buildHandleDetail
 
-  bool parseStringIntoConfigDetail(const std::string& configString) override {
-    bool subDivsSet = setIntFromConfigKey(
-        "_subdivs_", configString, [this](int val) { setSubdivisions(val); });
-
-    return subDivsSet;
-  }
-
  public:
   ESP_SMART_POINTERS(IcospherePrimitiveAttributes)
 };  // class IcospherePrimitiveAttributes
@@ -489,8 +372,8 @@ class UVSpherePrimitiveAttributes : public AbstractPrimitiveAttributes {
   /**
    * @brief This will determine if the stated template has the required
    * quantities needed to instantiate a primitive properly of desired type
-   * @return whether or not the template holds valid data for desired
-   * primitive type
+   * @return whether or not the template holds valid data for desired primitive
+   * type
    */
   bool isValidTemplate() override {
     return ((getIsWireframe() &&
@@ -509,8 +392,6 @@ class UVSpherePrimitiveAttributes : public AbstractPrimitiveAttributes {
     }
     return oHndlStrm.str();
   }  // buildHandleDetail
-
-  bool parseStringIntoConfigDetail(const std::string& configString) override;
 
  public:
   ESP_SMART_POINTERS(UVSpherePrimitiveAttributes)

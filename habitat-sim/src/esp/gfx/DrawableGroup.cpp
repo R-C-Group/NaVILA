@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 #include "DrawableGroup.h"
@@ -39,11 +39,17 @@ Drawable* DrawableGroup::getDrawable(uint64_t id) const {
 
 bool DrawableGroup::registerDrawable(Drawable& drawable) {
   // if it is already registered, emplace will do nothing
-  return idToDrawable_.emplace(drawable.getDrawableId(), &drawable).second;
+  if (idToDrawable_.emplace(drawable.getDrawableId(), &drawable).second) {
+    return true;
+  }
+  return false;
 }
 bool DrawableGroup::unregisterDrawable(Drawable& drawable) {
   // if it is not registered, erase will do nothing
-  return idToDrawable_.erase(drawable.getDrawableId()) != 0;
+  if (idToDrawable_.erase(drawable.getDrawableId()) == 0) {
+    return false;
+  }
+  return true;
 }
 
 }  // namespace gfx

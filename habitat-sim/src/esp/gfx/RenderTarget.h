@@ -1,26 +1,18 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_GFX_RENDERTARGET_H_
 #define ESP_GFX_RENDERTARGET_H_
 
-#include <Corrade/Containers/EnumSet.h>
 #include <Magnum/Magnum.h>
 
-#include "esp/core/Esp.h"
+#include "esp/core/esp.h"
 
+#include "esp/gfx/DepthUnprojection.h"
 #include "esp/gfx/Renderer.h"
 
 namespace esp {
-
-namespace sensor {
-class VisualSensor;
-}
-namespace gfx_batch {
-class DepthShader;
-}
-
 namespace gfx {
 
 /**
@@ -32,36 +24,6 @@ namespace gfx {
  */
 class RenderTarget {
  public:
-  enum class Flag {
-    /**
-     * create a color attachment for the rgba render buffer
-     * No need to set it for depth sensor, semantic sensor etc. as it makes
-     * the rendering slower
-     */
-    RgbaAttachment = 1 << 0,
-    /**
-     * create a color attachment for the objectId texture
-     * No need to set it for color sensor, depth sensor etc. as it makes the
-     * rendering slower
-     */
-    ObjectIdAttachment = 1 << 1,
-    /**
-     * @brief create a depth attachment for the depth texture, it MUST be set
-     * for the depth sensor.
-     * No need to set it for color sensor, objectId sensor etc. as it makes the
-     * rendering slower (default depth buffer will be used in this case.)
-     */
-    DepthTextureAttachment = 1 << 2,
-
-    /**
-     * Enable HBAO visual effect that adds soft shadows to corners and crevices.
-     */
-    HorizonBasedAmbientOcclusion = 1 << 3,
-  };
-
-  typedef Corrade::Containers::EnumSet<Flag> Flags;
-  CORRADE_ENUMSET_FRIEND_OPERATORS(Flags)
-
   /**
    * @brief Constructor
    * @param size               The size of the underlying framebuffers in WxH
@@ -71,39 +33,35 @@ class RenderTarget {
    *                           Unprojects the depth on the CPU if nullptr.
    *                           Must be not nullptr to use @ref
    *                           readFrameDepthGPU()
-   * @param flags              The flags of the renderer target
-   * @param visualSensor       (optional) The visual sensor for this render
-   * target
+   * @param flags              The flags of the renderer that constructed this
+   *                           render target.  Currently just used to track
+   *                           whether or not @ref readFrameRgba,
+   *                           @ref blitRgbaToDefault, and @readFrameRgbaGPU
+   *                           are valid calls.
    */
   RenderTarget(const Magnum::Vector2i& size,
                const Magnum::Vector2& depthUnprojection,
-               gfx_batch::DepthShader* depthShader,
-               Flags flags = {Flag::RgbaAttachment | Flag::ObjectIdAttachment |
-                              Flag::DepthTextureAttachment},
-               const sensor::VisualSensor* visualSensor = nullptr);
+               DepthShader* depthShader,
+               Renderer::Flags flags);
 
   /**
    * @brief Constructor
    * @param size               The size of the underlying framebuffers in WxH
-   * @param depthUnprojection  Depth unprojection parameters.  See @ref
+   * @param depthUnprojection  Depth unrpojection parameters.  See @ref
    *                           calculateDepthUnprojection()
-   * @param visualSensor       (optional) The visual sensor for this render
-   * target
    *
    * Equivalent to calling
    * @ref RenderTarget(size, depthUnprojection, nullptr, {})
    */
   RenderTarget(const Magnum::Vector2i& size,
-               const Magnum::Vector2& depthUnprojection,
-               const sensor::VisualSensor* visualSensor = nullptr)
-      : RenderTarget{size, depthUnprojection, nullptr, {}, visualSensor} {}
+               const Magnum::Vector2& depthUnprojection)
+      : RenderTarget{size, depthUnprojection, nullptr, {}} {}
 
-  ~RenderTarget() = default;
+  ~RenderTarget() {}
 
   /**
    * @brief Called before any draw calls that target this RenderTarget
-   * Clears the framebuffer to the color specified by the VisualSensorSpec and
-   * binds it.
+   * Clears the framebuffer and binds it
    */
   void renderEnter();
 
@@ -153,31 +111,10 @@ class RenderTarget {
   void readFrameObjectId(const Magnum::MutableImageView2D& view);
 
   /**
-   * @brief Blits the rgba buffer from internal FBO to given framebuffer
-   * rectangle
-   */
-  void blitRgbaTo(Magnum::GL::AbstractFramebuffer& target,
-                  const Magnum::Range2Di& targetRectangle);
-
-  /**
-   * @brief Blits the rgba buffer from internal FBO to default frame buffer.
+   * @brief Blits the rgba buffer from internal FBO to default frame buffer
+   * which in case of EmscriptenApplication will be a canvas element.
    */
   void blitRgbaToDefault();
-
-  /**
-   * @brief get the depth texture
-   */
-  Magnum::GL::Texture2D& getDepthTexture();
-
-  /**
-   * @brief get the object id texture
-   */
-  Magnum::GL::Texture2D& getObjectIdTexture();
-
-  /**
-   * @brief draw HBAO effect if enabled for this render target
-   */
-  void tryDrawHbao();
 
   // @brief Delete copy Constructor
   RenderTarget(const RenderTarget&) = delete;

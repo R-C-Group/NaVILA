@@ -1,12 +1,13 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #include "PhysicsAttributesManager.h"
-#include "AbstractAttributesManager.h"
+#include "AttributesManagerBase.h"
 
-#include "esp/io/Json.h"
+#include "esp/io/json.h"
 
+using std::placeholders::_1;
 namespace Cr = Corrade;
 namespace esp {
 
@@ -23,59 +24,49 @@ PhysicsManagerAttributes::ptr PhysicsAttributesManager::createObject(
       physicsFilename, msg, registerTemplate);
 
   if (nullptr != attrs) {
-    ESP_DEBUG(Mn::Debug::Flag::NoSpace)
-        << msg << " physics manager attributes created"
-        << (registerTemplate ? " and registered." : ".");
+    LOG(INFO) << msg << " physics manager attributes created"
+              << (registerTemplate ? " and registered." : ".");
   }
   return attrs;
 }  // PhysicsAttributesManager::createObject
 
 void PhysicsAttributesManager::setValsFromJSONDoc(
     PhysicsManagerAttributes::ptr physicsManagerAttributes,
-    const io::JsonGenericValue& jsonConfig) {
-  // load the simulator preference - default is "none"
-  // simulator, set in attributes ctor.
+    const io::JsonGenericValue&
+        jsonConfig) {  // load the simulator preference - default is "none"
+                       // simulator, set in
+  // attributes ctor.
   io::jsonIntoConstSetter<std::string>(
       jsonConfig, "physics_simulator",
-      [physicsManagerAttributes](const std::string& simulator) {
-        physicsManagerAttributes->setSimulator(simulator);
-      });
+      std::bind(&PhysicsManagerAttributes::setSimulator,
+                physicsManagerAttributes, _1));
 
   // load the physics timestep
   io::jsonIntoSetter<double>(jsonConfig, "timestep",
-                             [physicsManagerAttributes](double timestep) {
-                               physicsManagerAttributes->setTimestep(timestep);
-                             });
+                             std::bind(&PhysicsManagerAttributes::setTimestep,
+                                       physicsManagerAttributes, _1));
 
   // load the max substeps between time step
-  io::jsonIntoSetter<int>(
-      jsonConfig, "max_substeps", [physicsManagerAttributes](int max_substeps) {
-        physicsManagerAttributes->setMaxSubsteps(max_substeps);
-      });
+  io::jsonIntoSetter<int>(jsonConfig, "max_substeps",
+                          std::bind(&PhysicsManagerAttributes::setMaxSubsteps,
+                                    physicsManagerAttributes, _1));
   // load the friction coefficient
   io::jsonIntoSetter<double>(
       jsonConfig, "friction_coefficient",
-      [physicsManagerAttributes](double friction_coefficient) {
-        physicsManagerAttributes->setFrictionCoefficient(friction_coefficient);
-      });
+      std::bind(&PhysicsManagerAttributes::setFrictionCoefficient,
+                physicsManagerAttributes, _1));
 
   // load the restitution coefficient
   io::jsonIntoSetter<double>(
       jsonConfig, "restitution_coefficient",
-      [physicsManagerAttributes](double restitution_coefficient) {
-        physicsManagerAttributes->setRestitutionCoefficient(
-            restitution_coefficient);
-      });
+      std::bind(&PhysicsManagerAttributes::setRestitutionCoefficient,
+                physicsManagerAttributes, _1));
 
   // load world gravity
   io::jsonIntoConstSetter<Magnum::Vector3>(
       jsonConfig, "gravity",
-      [physicsManagerAttributes](const Magnum::Vector3& gravity) {
-        physicsManagerAttributes->setGravity(gravity);
-      });
-
-  // check for user defined attributes
-  this->parseUserDefinedJsonVals(physicsManagerAttributes, jsonConfig);
+      std::bind(&PhysicsManagerAttributes::setGravity, physicsManagerAttributes,
+                _1));
 
 }  // PhysicsAttributesManager::createFileBasedAttributesTemplate
 

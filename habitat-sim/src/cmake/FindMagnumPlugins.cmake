@@ -13,52 +13,32 @@
 # This command will not try to find any actual plugin. The plugins are:
 #
 #  AssimpImporter               - Assimp importer
-#  AstcImporter                 - ASTC importer
 #  BasisImageConverter          - Basis image converter
 #  BasisImporter                - Basis importer
-#  BcDecImageConverter          - BCn image decoder using bcdec
 #  DdsImporter                  - DDS importer
 #  DevIlImageImporter           - Image importer using DevIL
 #  DrFlacAudioImporter          - FLAC audio importer using dr_flac
 #  DrMp3AudioImporter           - MP3 audio importer using dr_mp3
 #  DrWavAudioImporter           - WAV audio importer using dr_wav
-#  EtcDecImageConverter         - ETC/EAC image decoder using etcdec
 #  Faad2AudioImporter           - AAC audio importer using FAAD2
 #  FreeTypeFont                 - FreeType font
-#  GlslangShaderConverter       - Glslang shader converter
-#  GltfImporter                 - glTF importer
-#  GltfSceneConverter           - glTF converter
 #  HarfBuzzFont                 - HarfBuzz font
 #  IcoImporter                  - ICO importer
 #  JpegImageConverter           - JPEG image converter
 #  JpegImporter                 - JPEG importer
-#  KtxImageConverter            - KTX image converter
-#  KtxImporter                  - KTX importer
 #  MeshOptimizerSceneConverter  - MeshOptimizer scene converter
 #  MiniExrImageConverter        - OpenEXR image converter using miniexr
 #  OpenGexImporter              - OpenGEX importer
 #  PngImageConverter            - PNG image converter
 #  PngImporter                  - PNG importer
 #  PrimitiveImporter            - Primitive importer
-#  SpirvToolsShaderConverter    - SPIR-V Tools shader converter
-#  SpngImporter                 - PNG importer using libspng
 #  StanfordImporter             - Stanford PLY importer
 #  StanfordSceneConverter       - Stanford PLY converter
-#  StbDxtImageConverter         - BC1/BC3 image compressor using stb_dxt
 #  StbImageConverter            - Image converter using stb_image_write
 #  StbImageImporter             - Image importer using stb_image
-#  StbResizeImageConverter      - Image resizing using stb_image_resize
 #  StbTrueTypeFont              - TrueType font using stb_truetype
 #  StbVorbisAudioImporter       - OGG audio importer using stb_vorbis
 #  StlImporter                  - STL importer
-#  UfbxImporter                 - FBX and OBJ importer using ufbx
-#  WebPImageConverter           - WebP image converter
-#  WebPImporter                 - WebP importer
-#
-# If Magnum is built with MAGNUM_BUILD_DEPRECATED enabled, these additional
-# plugins are available for backwards compatibility purposes:
-#
-#  CgltfImporter                - glTF importer using cgltf
 #  TinyGltfImporter             - GLTF importer using tiny_gltf
 #
 # Some plugins expose their internal state through separate libraries. The
@@ -95,8 +75,7 @@
 #   This file is part of Magnum.
 #
 #   Copyright © 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019,
-#               2020, 2021, 2022, 2023, 2024, 2025
-#             Vladimír Vondruš <mosra@centrum.cz>
+#               2020 Vladimír Vondruš <mosra@centrum.cz>
 #   Copyright © 2019 Jonathan Hale <squareys@googlemail.com>
 #
 #   Permission is hereby granted, free of charge, to any person obtaining a
@@ -131,11 +110,6 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
 
     if(_component STREQUAL AssimpImporter)
         list(APPEND _MAGNUMPLUGINS_${_component}_MAGNUM_DEPENDENCIES AnyImageImporter)
-    elseif(_component STREQUAL CgltfImporter)
-        # TODO remove when the deprecated plugin is gone
-        list(APPEND _MAGNUMPLUGINS_${_component}_MAGNUM_DEPENDENCIES AnyImageImporter)
-    elseif(_component STREQUAL GltfImporter)
-        list(APPEND _MAGNUMPLUGINS_${_component}_MAGNUM_DEPENDENCIES AnyImageImporter)
     elseif(_component STREQUAL MeshOptimizerSceneConverter)
         list(APPEND _MAGNUMPLUGINS_${_component}_MAGNUM_DEPENDENCIES MeshTools)
     elseif(_component STREQUAL OpenGexImporter)
@@ -146,10 +120,7 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
         list(APPEND _MAGNUMPLUGINS_${_component}_MAGNUM_DEPENDENCIES MeshTools)
     elseif(_component STREQUAL StanfordSceneConverter)
         list(APPEND _MAGNUMPLUGINS_${_component}_MAGNUM_DEPENDENCIES MeshTools)
-    elseif(_component STREQUAL UfbxImporter)
-        list(APPEND _MAGNUMPLUGINS_${_component}_MAGNUM_DEPENDENCIES AnyImageImporter)
     elseif(_component STREQUAL TinyGltfImporter)
-        # TODO remove when the deprecated plugin is gone
         list(APPEND _MAGNUMPLUGINS_${_component}_MAGNUM_DEPENDENCIES AnyImageImporter)
     endif()
 
@@ -157,73 +128,27 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
 endforeach()
 find_package(Magnum REQUIRED ${_MAGNUMPLUGINS_DEPENDENCIES})
 
-# Global include dir that's unique to Magnum Plugins. Often they will be
-# installed alongside Magnum, which is why the hint, but if not, it shouldn't
-# just pick MAGNUM_INCLUDE_DIR because then _MAGNUMPLUGINS_*_INCLUDE_DIR will
-# fail to be found. In case of CMake subprojects the versionPlugins.h is
-# generated inside the build dir so this won't find it, instead
-# src/CMakeLists.txt forcibly sets MAGNUMPLUGINS_INCLUDE_DIR as an internal
-# cache value to make that work.
-find_path(MAGNUMPLUGINS_INCLUDE_DIR Magnum/versionPlugins.h
+# Global plugin include dir
+find_path(MAGNUMPLUGINS_INCLUDE_DIR MagnumPlugins
     HINTS ${MAGNUM_INCLUDE_DIR})
 mark_as_advanced(MAGNUMPLUGINS_INCLUDE_DIR)
 
-# CMake module dir for dependencies. It might not be present at all if no
-# feature that needs them is enabled, in which case it'll be left at NOTFOUND.
-# But in that case it should also not be subsequently needed for any
-# find_package(). If this is called from a superproject, the
-# _MAGNUMPLUGINS_DEPENDENCY_MODULE_DIR is already set by
-# modules/CMakeLists.txt.
-find_path(_MAGNUMPLUGINS_DEPENDENCY_MODULE_DIR
-    NAMES
-        FindAssimp.cmake FindBasisUniversal.cmake FindDevIL.cmake
-        FindFAAD2.cmake FindGlslang.cmake FindHarfBuzz.cmake
-        FindOpenEXR.cmake FindSpirvTools.cmake FindSpng.cmake FindWebP.cmake
-        FindZstd.cmake
-    PATH_SUFFIXES share/cmake/MagnumPlugins/dependencies)
-mark_as_advanced(_MAGNUMPLUGINS_DEPENDENCY_MODULE_DIR)
-
-# If the module dir is found and is not present in CMAKE_MODULE_PATH already
-# (such as when someone explicitly added it, or if it's the Magnum's modules/
-# dir in case of a superproject), add it as the first before all other. Set a
-# flag to remove it again at the end, so the modules don't clash with Find
-# modules of the same name from other projects.
-if(_MAGNUMPLUGINS_DEPENDENCY_MODULE_DIR AND NOT _MAGNUMPLUGINS_DEPENDENCY_MODULE_DIR IN_LIST CMAKE_MODULE_PATH)
-    set(CMAKE_MODULE_PATH ${_MAGNUMPLUGINS_DEPENDENCY_MODULE_DIR} ${CMAKE_MODULE_PATH})
-    set(_MAGNUMPLUGINS_REMOVE_DEPENDENCY_MODULE_DIR_FROM_CMAKE_PATH ON)
-else()
-    unset(_MAGNUMPLUGINS_REMOVE_DEPENDENCY_MODULE_DIR_FROM_CMAKE_PATH)
-endif()
-
 # Component distinction (listing them explicitly to avoid mistakes with finding
 # components from other repositories)
-set(_MAGNUMPLUGINS_LIBRARY_COMPONENTS OpenDdl)
-set(_MAGNUMPLUGINS_PLUGIN_COMPONENTS
-    AssimpImporter AstcImporter BasisImageConverter BasisImporter
-    BcDecImageConverter DdsImporter DevIlImageImporter DrFlacAudioImporter
-    DrMp3AudioImporter DrWavAudioImporter EtcDecImageConverter
-    Faad2AudioImporter FreeTypeFont GlslangShaderConverter GltfImporter
-    GltfSceneConverter HarfBuzzFont IcoImporter JpegImageConverter JpegImporter
-    KtxImageConverter KtxImporter MeshOptimizerSceneConverter
-    MiniExrImageConverter OpenExrImageConverter OpenExrImporter
-    OpenGexImporter PngImageConverter PngImporter PrimitiveImporter
-    SpirvToolsShaderConverter SpngImporter StanfordImporter
-    StanfordSceneConverter StbDxtImageConverter StbImageConverter
-    StbImageImporter StbResizeImageConverter StbTrueTypeFont
-    StbVorbisAudioImporter StlImporter UfbxImporter WebPImageConverter
-    WebPImporter)
-# Nothing is enabled by default right now
-set(_MAGNUMPLUGINS_IMPLICITLY_ENABLED_COMPONENTS )
+set(_MAGNUMPLUGINS_LIBRARY_COMPONENT_LIST OpenDdl)
+set(_MAGNUMPLUGINS_PLUGIN_COMPONENT_LIST
+    AssimpImporter BasisImageConverter BasisImporter DdsImporter
+    DevIlImageImporter DrFlacAudioImporter DrMp3AudioImporter
+    DrWavAudioImporter Faad2AudioImporter FreeTypeFont HarfBuzzFont IcoImporter
+    JpegImageConverter JpegImporter MeshOptimizerSceneConverter
+    MiniExrImageConverter OpenGexImporter PngImageConverter PngImporter
+    PrimitiveImporter StanfordImporter StanfordSceneConverter StbImageConverter
+    StbImageImporter StbTrueTypeFont StbVorbisAudioImporter StlImporter
+    TinyGltfImporter)
 
 # Inter-component dependencies
 set(_MAGNUMPLUGINS_HarfBuzzFont_DEPENDENCIES FreeTypeFont)
 set(_MAGNUMPLUGINS_OpenGexImporter_DEPENDENCIES OpenDdl)
-
-# CgltfImporter and TinyGltfImporter, available only on a deprecated build
-if(MAGNUM_BUILD_DEPRECATED)
-    list(APPEND _MAGNUMPLUGINS_PLUGIN_COMPONENTS CgltfImporter TinyGltfImporter)
-    set(_MAGNUMPLUGINS_CgltfImporter_DEPENDENCIES GltfImporter)
-endif()
 
 # Ensure that all inter-component dependencies are specified as well
 set(_MAGNUMPLUGINS_ADDITIONAL_COMPONENTS )
@@ -239,7 +164,6 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
 endforeach()
 
 # Join the lists, remove duplicate components
-set(_MAGNUMPLUGINS_ORIGINAL_FIND_COMPONENTS ${MagnumPlugins_FIND_COMPONENTS})
 if(_MAGNUMPLUGINS_ADDITIONAL_COMPONENTS)
     list(INSERT MagnumPlugins_FIND_COMPONENTS 0 ${_MAGNUMPLUGINS_ADDITIONAL_COMPONENTS})
 endif()
@@ -247,9 +171,12 @@ if(MagnumPlugins_FIND_COMPONENTS)
     list(REMOVE_DUPLICATES MagnumPlugins_FIND_COMPONENTS)
 endif()
 
-# Special cases of include paths. Libraries not listed here have a path suffix
-# and include name derived from the library name in the loop below. (So far no
-# special cases.)
+# Convert components lists to regular expressions so I can use if(MATCHES).
+# TODO: Drop this once CMake 3.3 and if(IN_LIST) can be used
+foreach(_WHAT LIBRARY PLUGIN)
+    string(REPLACE ";" "|" _MAGNUMPLUGINS_${_WHAT}_COMPONENTS "${_MAGNUMPLUGINS_${_WHAT}_COMPONENT_LIST}")
+    set(_MAGNUMPLUGINS_${_WHAT}_COMPONENTS "^(${_MAGNUMPLUGINS_${_WHAT}_COMPONENTS})$")
+endforeach()
 
 # Find all components
 foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
@@ -258,69 +185,36 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
     # Create imported target in case the library is found. If the project is
     # added as subproject to CMake, the target already exists and all the
     # required setup is already done from the build tree.
-    if(TARGET "MagnumPlugins::${_component}") # Quotes to fix KDE's higlighter
+    if(TARGET MagnumPlugins::${_component})
         set(MagnumPlugins_${_component}_FOUND TRUE)
     else()
-        # Find plugin/library includes. Each has a configure.h file so there
-        # doesn't need to be any specialized per-library handling.
-        if(_component IN_LIST _MAGNUMPLUGINS_PLUGIN_COMPONENTS OR _component IN_LIST _MAGNUMPLUGINS_LIBRARY_COMPONENTS)
-            if(_component IN_LIST _MAGNUMPLUGINS_LIBRARY_COMPONENTS)
-                set(_include_path_directory Magnum)
-            else()
-                set(_include_path_directory MagnumPlugins)
-            endif()
-
-            find_file(_MAGNUMPLUGINS_${_COMPONENT}_CONFIGURE_FILE configure.h
-                HINTS ${MAGNUMPLUGINS_INCLUDE_DIR}/${_include_path_directory}/${_component})
-            mark_as_advanced(_MAGNUMPLUGINS_${_COMPONENT}_CONFIGURE_FILE)
-
-            # Determine if the plugin/library is static or dynamic by reading
-            # the per-library config file. Plugins use this for automatic
-            # import if static, libraries for finding a DLL location if shared.
-            # If the file wasn't found, skip this so it fails on the FPHSA
-            # below and not right here.
-            if(_MAGNUMPLUGINS_${_COMPONENT}_CONFIGURE_FILE)
-                file(READ ${_MAGNUMPLUGINS_${_COMPONENT}_CONFIGURE_FILE} _magnumPluginsConfigure)
-                string(REGEX REPLACE ";" "\\\\;" _magnumPluginsConfigure "${_magnumPluginsConfigure}")
-                string(REGEX REPLACE "\n" ";" _magnumPluginsConfigure "${_magnumPluginsConfigure}")
-                list(FIND _magnumPluginsConfigure "#define MAGNUM_${_COMPONENT}_BUILD_STATIC" _magnumPluginsBuildStatic)
-                if(NOT _magnumPluginsBuildStatic EQUAL -1)
-                    # The variable is inconsistently named between C++ and
-                    # CMake, so keep it underscored / private
-                    set(_MAGNUMPLUGINS_${_COMPONENT}_BUILD_STATIC ON)
-                endif()
-            endif()
-        endif()
-
         # Library components
-        if(_component IN_LIST _MAGNUMPLUGINS_LIBRARY_COMPONENTS)
+        if(_component MATCHES ${_MAGNUMPLUGINS_LIBRARY_COMPONENTS})
+            add_library(MagnumPlugins::${_component} UNKNOWN IMPORTED)
+
+            # Set library defaults, find the library
+            set(_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_PATH_SUFFIX Magnum/${_component})
+            set(_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_PATH_NAMES ${_component}.h)
+
             # Try to find both debug and release version
             find_library(MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_DEBUG Magnum${_component}-d)
             find_library(MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_RELEASE Magnum${_component})
             mark_as_advanced(MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_DEBUG
                 MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_RELEASE)
-
-            # On Windows, if we have a dynamic build of given library, find the
-            # DLLs as well. Abuse find_program() since the DLLs should be
-            # alongside usual executables. On MinGW they however have a lib
-            # prefix.
-            if(CORRADE_TARGET_WINDOWS AND NOT _MAGNUMPLUGINS_${_COMPONENT}_BUILD_STATIC)
-                find_program(MAGNUMPLUGINS_${_COMPONENT}_DLL_DEBUG ${CMAKE_SHARED_LIBRARY_PREFIX}Magnum${_component}-d.dll)
-                find_program(MAGNUMPLUGINS_${_COMPONENT}_DLL_RELEASE ${CMAKE_SHARED_LIBRARY_PREFIX}Magnum${_component}.dll)
-                mark_as_advanced(MAGNUMPLUGINS_${_COMPONENT}_DLL_DEBUG
-                    MAGNUMPLUGINS_${_COMPONENT}_DLL_RELEASE)
-            # If not on Windows or on a static build, unset the DLL variables
-            # to avoid leaks when switching shared and static builds
-            else()
-                unset(MAGNUMPLUGINS_${_COMPONENT}_DLL_DEBUG CACHE)
-                unset(MAGNUMPLUGINS_${_COMPONENT}_DLL_RELEASE CACHE)
-            endif()
+        endif()
 
         # Plugin components
-        elseif(_component IN_LIST _MAGNUMPLUGINS_PLUGIN_COMPONENTS)
+        if(_component MATCHES ${_MAGNUMPLUGINS_PLUGIN_COMPONENTS})
+            add_library(MagnumPlugins::${_component} UNKNOWN IMPORTED)
+
             # AudioImporter plugin specific name suffixes
             if(_component MATCHES ".+AudioImporter$")
                 set(_MAGNUMPLUGINS_${_COMPONENT}_PATH_SUFFIX audioimporters)
+
+                # Audio importer class is Audio::*Importer, thus we need to
+                # convert *AudioImporter.h to *Importer.h
+                string(REPLACE "AudioImporter" "Importer" _MAGNUMPLUGINS_${_COMPONENT}_HEADER_NAME "${_component}")
+                set(_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_PATH_NAMES ${_MAGNUMPLUGINS_${_COMPONENT}_HEADER_NAME}.h)
 
             # Importer plugin specific name suffixes
             elseif(_component MATCHES ".+Importer$")
@@ -343,9 +237,15 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
                 set(_MAGNUMPLUGINS_${_COMPONENT}_PATH_SUFFIX fontconverters)
             endif()
 
+            # Don't override the exception for *AudioImporter plugins
+            set(_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_PATH_SUFFIX MagnumPlugins/${_component})
+            if(NOT _MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_PATH_NAMES)
+                set(_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_PATH_NAMES ${_component}.h)
+            endif()
+
             # Dynamic plugins don't have any prefix (e.g. `lib` on Linux),
             # search with empty prefix and then reset that back so we don't
-            # accidentally break something else
+            # accidentaly break something else
             set(_tmp_prefixes "${CMAKE_FIND_LIBRARY_PREFIXES}")
             set(CMAKE_FIND_LIBRARY_PREFIXES "${CMAKE_FIND_LIBRARY_PREFIXES};")
 
@@ -368,81 +268,23 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
 
             # Reset back
             set(CMAKE_FIND_LIBRARY_PREFIXES "${_tmp_prefixes}")
-
-        # Something unknown, skip. FPHSA will take care of handling this below.
-        else()
-            continue()
         endif()
 
-        # Decide if the plugin/library was found. If not, skip the rest, which
-        # populates the target properties and finds additional dependencies.
-        # This means that the rest can also rely on that e.g. FindZstd.cmake is
-        # present in _MAGNUMPLUGINS_DEPENDENCY_MODULE_DIR -- given that the
-        # library needing Zstd was found, it likely also installed FindZstd for
-        # itself.
-        if(
-            # If the component is a library or a plugin, it should have the
-            # configure file
-            (_component IN_LIST _MAGNUMPLUGINS_PLUGIN_COMPONENTS OR _component IN_LIST _MAGNUMPLUGINS_LIBRARY_COMPONENTS) AND _MAGNUMPLUGINS_${_COMPONENT}_CONFIGURE_FILE AND (
-                # And it should have a debug library, and a DLL found if
-                # expected
-                (MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_DEBUG AND (
-                    NOT DEFINED MAGNUMPLUGINS_${_COMPONENT}_DLL_DEBUG OR
-                    MAGNUMPLUGINS_${_COMPONENT}_DLL_DEBUG)) OR
-                # Or have a release library, and a DLL found if expected
-                (MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_RELEASE AND (
-                    NOT DEFINED MAGNUMPLUGINS_${_COMPONENT}_DLL_RELEASE OR
-                    MAGNUMPLUGINS_${_COMPONENT}_DLL_RELEASE)))
-        )
-            set(MagnumPlugins_${_component}_FOUND TRUE)
-        else()
-            set(MagnumPlugins_${_component}_FOUND FALSE)
-            continue()
-        endif()
-
-        # Target and location for libraries
-        if(_component IN_LIST _MAGNUMPLUGINS_LIBRARY_COMPONENTS)
-            if(_MAGNUMPLUGINS_${_COMPONENT}_BUILD_STATIC)
-                add_library(MagnumPlugins::${_component} STATIC IMPORTED)
-            else()
-                add_library(MagnumPlugins::${_component} SHARED IMPORTED)
+        # Library location for plugins/libraries
+        if(_component MATCHES ${_MAGNUMPLUGINS_PLUGIN_COMPONENTS} OR _component MATCHES ${_MAGNUMPLUGINS_LIBRARY_COMPONENTS})
+            if(MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_RELEASE)
+                set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
+                    IMPORTED_CONFIGURATIONS RELEASE)
+                set_property(TARGET MagnumPlugins::${_component} PROPERTY
+                    IMPORTED_LOCATION_RELEASE ${MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_RELEASE})
             endif()
 
-            foreach(_CONFIG DEBUG RELEASE)
-                if(NOT MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_${_CONFIG})
-                    continue()
-                endif()
-
+            if(MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_DEBUG)
                 set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                    IMPORTED_CONFIGURATIONS ${_CONFIG})
-                # Unfortunately for a DLL the two properties are swapped out,
-                # *.lib goes to IMPLIB, so it's duplicated like this
-                if(DEFINED MAGNUMPLUGINS_${_COMPONENT}_DLL_${_CONFIG})
-                    # Quotes to "fix" KDE's higlighter
-                    set_target_properties("MagnumPlugins::${_component}" PROPERTIES
-                        IMPORTED_LOCATION_${_CONFIG} ${MAGNUMPLUGINS_${_COMPONENT}_DLL_${_CONFIG}}
-                        IMPORTED_IMPLIB_${_CONFIG} ${MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_${_CONFIG}})
-                else()
-                    set_property(TARGET MagnumPlugins::${_component} PROPERTY
-                        IMPORTED_LOCATION_${_CONFIG} ${MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_${_CONFIG}})
-                endif()
-            endforeach()
-
-        # Target and location for plugins. Not dealing with DLL locations for
-        # those.
-        elseif(_component IN_LIST _MAGNUMPLUGINS_PLUGIN_COMPONENTS)
-            add_library(MagnumPlugins::${_component} UNKNOWN IMPORTED)
-
-            foreach(_CONFIG DEBUG RELEASE)
-                if(NOT MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_${_CONFIG})
-                    continue()
-                endif()
-
-                set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                    IMPORTED_CONFIGURATIONS ${_CONFIG})
+                    IMPORTED_CONFIGURATIONS DEBUG)
                 set_property(TARGET MagnumPlugins::${_component} PROPERTY
-                    IMPORTED_LOCATION_${_CONFIG} ${MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_${_CONFIG}})
-            endforeach()
+                    IMPORTED_LOCATION_DEBUG ${MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_DEBUG})
+            endif()
         endif()
 
         # AssimpImporter plugin dependencies
@@ -450,8 +292,6 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
             find_package(Assimp)
             set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
                 INTERFACE_LINK_LIBRARIES Assimp::Assimp)
-
-        # AstcImporter has no dependencies
 
         # BasisImageConverter / BasisImporter has only compiled-in
         # dependencies, except in case of vcpkg, then we need to link to a
@@ -464,34 +304,14 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
             if(basisu_FOUND AND NOT BASIS_UNIVERSAL_DIR)
                 set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
                     INTERFACE_LINK_LIBRARIES basisu_encoder)
-            else()
-                # Our own build may depend on Zstd, as we replace the bundled
-                # files with an external library. Include it if present,
-                # otherwise assume it's compiled without.
-                find_package(Zstd)
-                if(Zstd_FOUND)
-                    set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                        INTERFACE_LINK_LIBRARIES Zstd::Zstd)
-                endif()
             endif()
         elseif(_component STREQUAL BasisImporter)
             find_package(basisu CONFIG QUIET)
             if(basisu_FOUND AND NOT BASIS_UNIVERSAL_DIR)
                 set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
                     INTERFACE_LINK_LIBRARIES basisu_transcoder)
-            else()
-                # Our own build may depend on Zstd, as we replace the bundled
-                # files with an external library. Include it if present,
-                # otherwise assume it's compiled without.
-                find_package(Zstd)
-                if(Zstd_FOUND)
-                    set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                        INTERFACE_LINK_LIBRARIES Zstd::Zstd)
-                endif()
             endif()
 
-        # BcDecImageConverter has no dependencies
-        # CgltfImporter has no dependencies
         # DdsImporter has no dependencies
 
         # DevIlImageImporter plugin dependencies
@@ -503,7 +323,6 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
         # DrFlacAudioImporter has no dependencies
         # DrMp3AudioImporter has no dependencies
         # DrWavAudioImporter has no dependencies
-        # EtcDecImageConverter has no dependencies
 
         # Faad2AudioImporter plugin dependencies
         elseif(_component STREQUAL Faad2AudioImporter)
@@ -524,15 +343,6 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
                 set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
                     INTERFACE_LINK_LIBRARIES ${FREETYPE_LIBRARIES})
             endif()
-
-        # GlslangShaderConverter plugin dependencies
-        elseif(_component STREQUAL GlslangShaderConverter)
-            find_package(Glslang REQUIRED)
-            set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                INTERFACE_LINK_LIBRARIES Glslang::Glslang)
-
-        # GltfImporter has no dependencies
-        # GltfSceneConverter has no dependencies
 
         # HarfBuzzFont plugin dependencies
         elseif(_component STREQUAL HarfBuzzFont)
@@ -567,9 +377,6 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
                     INTERFACE_LINK_LIBRARIES ${JPEG_LIBRARIES})
             endif()
 
-        # KtxImageConverter has no dependencies
-        # KtxImporter has no dependencies
-
         # MeshOptimizerSceneConverter plugin dependencies
         elseif(_component STREQUAL MeshOptimizerSceneConverter)
             if(NOT TARGET meshoptimizer)
@@ -582,25 +389,6 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
             endif()
 
         # MiniExrImageConverter has no dependencies
-
-        # OpenExrImporter / OpenExrImageConverter plugin dependencies
-        elseif(_component STREQUAL OpenExrImporter OR _component STREQUAL OpenExrImageConverter)
-            # Force our own FindOpenEXR module, which then delegates to the
-            # config if appropriate
-            find_package(OpenEXR REQUIRED MODULE)
-            set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                INTERFACE_LINK_LIBRARIES OpenEXR::OpenEXR)
-            # OpenEXR uses exceptions, which need an explicit flag on
-            # Emscripten. This is most likely not propagated through its CMake
-            # config file, so doing that explicitly here.
-            if(CORRADE_TARGET_EMSCRIPTEN)
-                if(CMAKE_VERSION VERSION_LESS 3.13)
-                    message(FATAL_ERROR "CMake 3.13+ is required in order to specify Emscripten linker options")
-                endif()
-                set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                    INTERFACE_LINK_OPTIONS "SHELL:-s DISABLE_EXCEPTION_CATCHING=0")
-            endif()
-
         # No special setup for the OpenDdl library
         # OpenGexImporter has no dependencies
 
@@ -621,71 +409,37 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
                 set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
                     INTERFACE_LINK_LIBRARIES ${PNG_LIBRARIES})
             endif()
+        endif()
 
         # PrimitiveImporter has no dependencies
-
-        # SpirvToolsShaderConverter plugin dependencies
-        elseif(_component STREQUAL SpirvToolsShaderConverter)
-            find_package(SpirvTools REQUIRED)
-            set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                INTERFACE_LINK_LIBRARIES SpirvTools::SpirvTools SpirvTools::Opt)
-
-        # SpngImporter plugin dependencies
-        elseif(_component STREQUAL SpngImporter)
-            find_package(Spng REQUIRED)
-            set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                INTERFACE_LINK_LIBRARIES Spng::Spng)
-
         # StanfordImporter has no dependencies
         # StanfordSceneConverter has no dependencies
-        # StbDxtImageConverter has no dependencies
         # StbImageConverter has no dependencies
-
-        # StbImageImporter plugin dependencies
-        elseif(_component STREQUAL StbImageImporter)
-            # To solve a LTO-specific linker error. See StbImageImporter's
-            # CMakeLists.txt for details.
-            if(CORRADE_TARGET_EMSCRIPTEN AND NOT EMSCRIPTEN_VERSION VERSION_LESS 3.1.42 AND EMSCRIPTEN_VERSION VERSION_LESS 3.1.46)
-                if(CMAKE_VERSION VERSION_LESS 3.13)
-                    message(FATAL_ERROR "CMake 3.13+ is required in order to specify Emscripten linker options")
-                endif()
-                target_link_options(MagnumPlugins::${_component} INTERFACE $<$<CONFIG:Release>:-Wl,-u,scalbnf>)
-            endif()
-
-        # StbResizeImageConverter has no dependencies
+        # StbImageImporter has no dependencies
         # StbTrueTypeFont has no dependencies
-
-        # StbVorbisAudioImporter plugin dependencies
-        elseif(_component STREQUAL StbVorbisAudioImporter)
-            # To solve a LTO-specific linker error. See StbVorbisAudioImporter's
-            # CMakeLists.txt for details.
-            if(CORRADE_TARGET_EMSCRIPTEN AND NOT EMSCRIPTEN_VERSION VERSION_LESS 3.1.42 AND EMSCRIPTEN_VERSION VERSION_LESS 3.1.46)
-                if(CMAKE_VERSION VERSION_LESS 3.13)
-                    message(FATAL_ERROR "CMake 3.13+ is required in order to specify Emscripten linker options")
-                endif()
-                target_link_options(MagnumPlugins::${_component} INTERFACE $<$<CONFIG:Release>:-Wl,-u,scalbnf>)
-            endif()
-
+        # StbVorbisAudioImporter has no dependencies
         # StlImporter has no dependencies
-        # UfbxImporter has no dependencies
         # TinyGltfImporter has no dependencies
 
-        # WebPImageConverter / WebPImporter plugin dependencies
-        elseif(_component STREQUAL WebPImageConverter OR _component STREQUAL WebPImporter)
-            find_package(WebP REQUIRED)
-            set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                INTERFACE_LINK_LIBRARIES WebP::WebP)
-
+        # Find plugin/library includes
+        if(_component MATCHES ${_MAGNUMPLUGINS_PLUGIN_COMPONENTS} OR _component MATCHES ${_MAGNUMPLUGINS_LIBRARY_COMPONENTS})
+            find_path(_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_DIR
+                NAMES ${_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_PATH_NAMES}
+                HINTS ${MAGNUMPLUGINS_INCLUDE_DIR}/${_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_PATH_SUFFIX})
+            mark_as_advanced(_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_DIR)
         endif()
 
         # Automatic import of static plugins
-        if(_component IN_LIST _MAGNUMPLUGINS_PLUGIN_COMPONENTS AND _MAGNUMPLUGINS_${_COMPONENT}_BUILD_STATIC)
-            get_filename_component(_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_DIR ${_MAGNUMPLUGINS_${_COMPONENT}_CONFIGURE_FILE} DIRECTORY)
-            set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
-                INTERFACE_SOURCES ${_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_DIR}/importStaticPlugin.cpp)
+        if(_component MATCHES ${_MAGNUMPLUGINS_PLUGIN_COMPONENTS})
+            file(READ ${_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_DIR}/configure.h _magnumPlugins${_component}Configure)
+            string(FIND "${_magnumPlugins${_component}Configure}" "#define MAGNUM_${_COMPONENT}_BUILD_STATIC" _magnumPlugins${_component}_BUILD_STATIC)
+            if(NOT _magnumPlugins${_component}_BUILD_STATIC EQUAL -1)
+                set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
+                    INTERFACE_SOURCES ${_MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_DIR}/importStaticPlugin.cpp)
+            endif()
         endif()
 
-        if(_component IN_LIST _MAGNUMPLUGINS_PLUGIN_COMPONENTS OR _component IN_LIST _MAGNUMPLUGINS_LIBRARY_COMPONENTS)
+        if(_component MATCHES ${_MAGNUMPLUGINS_PLUGIN_COMPONENTS} OR _component MATCHES ${_MAGNUMPLUGINS_LIBRARY_COMPONENTS})
             # Link to core Magnum library, add other Magnum dependencies
             set_property(TARGET MagnumPlugins::${_component} APPEND PROPERTY
                 INTERFACE_LINK_LIBRARIES Magnum::Magnum)
@@ -700,51 +454,17 @@ foreach(_component ${MagnumPlugins_FIND_COMPONENTS})
                     INTERFACE_LINK_LIBRARIES MagnumPlugins::${_dependency})
             endforeach()
         endif()
+
+        # Decide if the plugin/library was found
+        if((_component MATCHES ${_MAGNUMPLUGINS_PLUGIN_COMPONENTS} OR _component MATCHES ${_MAGNUMPLUGINS_LIBRARY_COMPONENTS}) AND _MAGNUMPLUGINS_${_COMPONENT}_INCLUDE_DIR AND (MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_DEBUG OR MAGNUMPLUGINS_${_COMPONENT}_LIBRARY_RELEASE))
+            set(MagnumPlugins_${_component}_FOUND TRUE)
+        else()
+            set(MagnumPlugins_${_component}_FOUND FALSE)
+        endif()
     endif()
 endforeach()
-
-# For CMake 3.16+ with REASON_FAILURE_MESSAGE, provide additional potentially
-# useful info about the failed components.
-if(NOT CMAKE_VERSION VERSION_LESS 3.16)
-    set(_MAGNUMPLUGINS_REASON_FAILURE_MESSAGE)
-    # Go only through the originally specified find_package() components, not
-    # the dependencies added by us afterwards
-    foreach(_component ${_MAGNUMPLUGINS_ORIGINAL_FIND_COMPONENTS})
-        if(MagnumPlugins_${_component}_FOUND)
-            continue()
-        endif()
-
-        # If it's not known at all, tell the user -- it might be a new library
-        # and an old Find module, or something platform-specific.
-        if(NOT _component IN_LIST _MAGNUMPLUGINS_LIBRARY_COMPONENTS AND NOT _component IN_LIST _MAGNUMPLUGINS_PLUGIN_COMPONENTS)
-            list(APPEND _MAGNUMPLUGINS_REASON_FAILURE_MESSAGE "${_component} is not a known component on this platform.")
-        # Otherwise, if it's not among implicitly built components, hint that
-        # the user may need to enable it
-        # TODO: currently, the _FOUND variable doesn't reflect if dependencies
-        #   were found. When it will, this needs to be updated to avoid
-        #   misleading messages.
-        elseif(NOT _component IN_LIST _MAGNUMPLUGINS_IMPLICITLY_ENABLED_COMPONENTS)
-            string(TOUPPER ${_component} _COMPONENT)
-            list(APPEND _MAGNUMPLUGINS_REASON_FAILURE_MESSAGE "${_component} is not built by default. Make sure you enabled MAGNUM_WITH_${_COMPONENT} when building Magnum Plugins.")
-        # Otherwise we have no idea. Better be silent than to print something
-        # misleading.
-        else()
-        endif()
-    endforeach()
-
-    string(REPLACE ";" " " _MAGNUMPLUGINS_REASON_FAILURE_MESSAGE "${_MAGNUMPLUGINS_REASON_FAILURE_MESSAGE}")
-    set(_MAGNUMPLUGINS_REASON_FAILURE_MESSAGE REASON_FAILURE_MESSAGE "${_MAGNUMPLUGINS_REASON_FAILURE_MESSAGE}")
-endif()
-
-# Remove Magnum Plugins dependency module dir from CMAKE_MODULE_PATH again. Do
-# it before the FPHSA call which may exit early in case of a failure.
-if(_MAGNUMPLUGINS_REMOVE_DEPENDENCY_MODULE_DIR_FROM_CMAKE_PATH)
-    list(REMOVE_ITEM CMAKE_MODULE_PATH ${_MAGNUMPLUGINS_DEPENDENCY_MODULE_DIR})
-    unset(_MAGNUMPLUGINS_REMOVE_DEPENDENCY_MODULE_DIR_FROM_CMAKE_PATH)
-endif()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(MagnumPlugins
     REQUIRED_VARS MAGNUMPLUGINS_INCLUDE_DIR
-    HANDLE_COMPONENTS
-    ${_MAGNUMPLUGINS_REASON_FAILURE_MESSAGE})
+    HANDLE_COMPONENTS)

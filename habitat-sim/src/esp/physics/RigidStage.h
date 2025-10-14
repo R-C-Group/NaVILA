@@ -1,11 +1,10 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_PHYSICS_RIGIDSTAGE_H_
 #define ESP_PHYSICS_RIGIDSTAGE_H_
 
-#include "esp/metadata/attributes/StageAttributes.h"
 #include "esp/physics/RigidBase.h"
 
 /** @file
@@ -13,12 +12,6 @@
  */
 namespace esp {
 namespace physics {
-
-/**
- * @brief A @ref RigidBase representing an individual rigid stage instance
- * attached to a SceneNode. This construction currently may only be
- * @ref esp::physics::MotionType::STATIC.
- */
 class RigidStage : public RigidBase {
  public:
   RigidStage(scene::SceneNode* rigidBodyNode,
@@ -27,35 +20,29 @@ class RigidStage : public RigidBase {
   /**
    * @brief Virtual destructor for a @ref RigidStage.
    */
-  ~RigidStage() override = default;
+  virtual ~RigidStage() {}
 
   /**
    * @brief Initializes the @ref RigidStage that inherits
    * from this class
-   * @param initAttributes The template structure defining relevant
-   * physical parameters for this object
+   * @param resMgr a reference to ResourceManager object
+   * @param handle The handle for the template structure defining relevant
+   * phyiscal parameters for this object
    * @return true if initialized successfully, false otherwise.
    */
-  bool initialize(metadata::attributes::AbstractObjectAttributes::ptr
-                      initAttributes) override;
+  bool initialize(const std::string& handle) override;
 
   /**
-   * @brief Get a copy of the template attributes describing the initial state
-   * of this stage object. These attributes have the combination of date from
-   * the original object attributes and specific instance attributes used to
-   * create this stage object. Note : values will reflect both sources, and
-   * should not be saved to disk as object attributes, since instance attribute
-   * modifications will still occur on subsequent loads
+   * @brief Get a copy of the template used to initialize this stage object.
    *
    * @return A copy of the @ref esp::metadata::attributes::StageAttributes
    * template used to create this stage object.
    */
   std::shared_ptr<metadata::attributes::StageAttributes>
   getInitializationAttributes() const {
-    return PhysicsObjectBase::getInitializationAttributes<
+    return RigidBase::getInitializationAttributes<
         metadata::attributes::StageAttributes>();
   };
-
   /**
    * @brief Finalize the creation of this @ref RigidStage
    * @return whether successful finalization.
@@ -68,6 +55,8 @@ class RigidStage : public RigidBase {
    * geometry.  This is overridden by inheriting class specific to certain
    * physics libraries.Necessary to support kinematic objects without any
    * dynamics support.
+   * @param resMgr Reference to resource manager, to access relevant components
+   * pertaining to the stage object
    * @return true if initialized successfully, false otherwise.
    */
   bool initialization_LibSpecific() override { return true; }
@@ -82,19 +71,16 @@ class RigidStage : public RigidBase {
 
  public:
   /**
-   * @brief Currently not supported. Set or reset the stages's state using the
-   * object's specified @p sceneInstanceAttributes_.
-   */
-  void resetStateFromSceneInstanceAttr() override {}
-
-  /**
-   * @brief Currently ignored for stage objects.
+   * @brief Set the @ref MotionType of the object. If the object is @ref
+   * ObjectType::SCENE it can only be @ref MotionType::STATIC. If the object is
+   * @ref ObjectType::OBJECT is can also be set to @ref MotionType::KINEMATIC.
+   * Only if a dervied @ref PhysicsManager implementing dynamics is in use can
+   * the object be set to @ref MotionType::DYNAMIC.
    * @param mt The desirved @ref MotionType.
+   * @return true if successfully set, false otherwise.
    */
-  void setMotionType(CORRADE_UNUSED MotionType mt) override {
-    ESP_WARNING() << "Stages cannot have their "
-                     "motion type changed from MotionType::STATIC, so "
-                     "aborting; motion type is unchanged.";
+  bool setMotionType(MotionType mt) override {
+    return mt == MotionType::STATIC;  // only option and default option
   }
 
  public:

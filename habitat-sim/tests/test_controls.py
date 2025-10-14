@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (c) Meta Platforms, Inc. and its affiliates.
+# Copyright (c) Facebook, Inc. and its affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
@@ -9,11 +9,12 @@ import hypothesis
 import magnum as mn
 import numpy as np
 import pytest
+import quaternion  # noqa: F401
 from hypothesis import strategies as st
 
 import habitat_sim
 import habitat_sim.errors
-from habitat_sim.utils.common import angle_between_quats, quat_to_magnum
+from habitat_sim.utils.common import angle_between_quats, quat_from_angle_axis
 
 
 def test_no_action():
@@ -47,7 +48,7 @@ def test_no_move_fun():
 @attr.s(auto_attribs=True, cmp=False)
 class ExpectedDelta:
     delta_pos: np.ndarray = attr.Factory(lambda: np.array([0, 0, 0]))
-    delta_rot: mn.Quaternion = attr.Factory(lambda: mn.Quaternion.identity_init())
+    delta_rot: np.quaternion = attr.Factory(lambda: np.quaternion(1, 0, 0, 0))
 
 
 def _check_state_same(s1, s2):
@@ -58,7 +59,7 @@ def _check_state_same(s1, s2):
 def _check_state_expected(s1, s2, expected: ExpectedDelta):
     assert np.linalg.norm(s2.position - s1.position - expected.delta_pos) < 1e-5
     assert (
-        angle_between_quats(s2.rotation * expected.delta_rot.inverted(), s1.rotation)
+        angle_between_quats(s2.rotation * expected.delta_rot.inverse(), s1.rotation)
         < 1e-5
     )
 
@@ -71,24 +72,20 @@ default_body_control_testdata = [
     (
         "turn_right",
         ExpectedDelta(
-            delta_rot=mn.Quaternion.rotation(
-                mn.Rad(mn.math.pi / 18.0), habitat_sim.geo.GRAVITY
-            )
+            delta_rot=quat_from_angle_axis(np.deg2rad(10.0), habitat_sim.geo.GRAVITY)
         ),
     ),
     (
         "turn_left",
         ExpectedDelta(
-            delta_rot=mn.Quaternion.rotation(
-                mn.Rad(mn.math.pi / 18.0), habitat_sim.geo.UP
-            )
+            delta_rot=quat_from_angle_axis(np.deg2rad(10.0), habitat_sim.geo.UP)
         ),
     ),
 ]
 
 
 @pytest.mark.parametrize("action,expected", default_body_control_testdata)
-def test_default_body_controls(action, expected):
+def test_default_body_contorls(action, expected):
     scene_graph = habitat_sim.SceneGraph()
     agent_config = habitat_sim.AgentConfiguration()
     agent_config.action_space = dict(
@@ -117,15 +114,6 @@ def test_default_body_controls(action, expected):
     agent.act(action)
     new_state = agent.state
 
-    print(
-        f"pre state rot : [{state.rotation.real}, {state.rotation.imag}] | new state rot : [{new_state.rotation.real}, {new_state.rotation.imag}] "
-    )
-
-    state.rotation = quat_to_magnum(state.rotation)
-    new_state.rotation = quat_to_magnum(new_state.rotation)
-
-    print(f"post state : {state} | new state : {new_state} ")
-
     _check_state_expected(state, new_state, expected)
     for k, v in state.sensor_states.items():
         assert k in new_state.sensor_states
@@ -138,37 +126,37 @@ default_sensor_control_testdata = [
     (
         "look_right",
         ExpectedDelta(
-            delta_rot=mn.Quaternion.rotation(mn.Rad(-10.0), habitat_sim.geo.UP)
+            delta_rot=quat_from_angle_axis(np.deg2rad(-10.0), habitat_sim.geo.UP)
         ),
     ),
     (
         "look_left",
         ExpectedDelta(
-            delta_rot=mn.Quaternion.rotation(mn.Rad(10.0), habitat_sim.geo.UP)
+            delta_rot=quat_from_angle_axis(np.deg2rad(10.0), habitat_sim.geo.UP)
         ),
     ),
     (
         "look_up",
         ExpectedDelta(
-            delta_rot=mn.Quaternion.rotation(mn.Rad(10.0), habitat_sim.geo.RIGHT)
+            delta_rot=quat_from_angle_axis(np.deg2rad(10.0), habitat_sim.geo.RIGHT)
         ),
     ),
     (
         "look_down",
         ExpectedDelta(
-            delta_rot=mn.Quaternion.rotation(mn.Rad(-10.0), habitat_sim.geo.RIGHT)
+            delta_rot=quat_from_angle_axis(np.deg2rad(-10.0), habitat_sim.geo.RIGHT)
         ),
     ),
     (
         "rotate_sensor_clockwise",
         ExpectedDelta(
-            delta_rot=mn.Quaternion.rotation(mn.Rad(-10.0), habitat_sim.geo.FRONT)
+            delta_rot=quat_from_angle_axis(np.deg2rad(-10.0), habitat_sim.geo.FRONT)
         ),
     ),
     (
         "rotate_sensor_anti_clockwise",
         ExpectedDelta(
-            delta_rot=mn.Quaternion.rotation(mn.Rad(10.0), habitat_sim.geo.FRONT)
+            delta_rot=quat_from_angle_axis(np.deg2rad(10.0), habitat_sim.geo.FRONT)
         ),
     ),
 ]
@@ -207,10 +195,8 @@ def test_default_sensor_contorls(action, expected):
     agent = habitat_sim.Agent(scene_graph.get_root_node().create_child(), agent_config)
 
     state = agent.state
-    state.rotation = quat_to_magnum(state.rotation)
     agent.act(action)
     new_state = agent.state
-    new_state.rotation = quat_to_magnum(new_state.rotation)
 
     _check_state_same(state, new_state)
     for k, v in state.sensor_states.items():

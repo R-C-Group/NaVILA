@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 #include "SceneGraph.h"
@@ -10,17 +10,29 @@
 namespace esp {
 namespace scene {
 
-SceneGraph::SceneGraph() : rootNode_{world_} {
+SceneGraph::SceneGraph()
+    : rootNode_{world_},
+      defaultRenderCameraNode_{rootNode_},
+      defaultRenderCamera_{defaultRenderCameraNode_} {
   // For now, just create one drawable group with empty string uuid
   createDrawableGroup(std::string{});
 }
 
+// set transformation, projection matrix, viewport to the default camera
+void SceneGraph::setDefaultRenderCamera(sensor::VisualSensor& sensor) {
+  ASSERT(sensor.isVisualSensor());
+
+  sensor.setTransformationMatrix(defaultRenderCamera_)
+      .setProjectionMatrix(defaultRenderCamera_)
+      .setViewport(defaultRenderCamera_);
+}
+
 bool SceneGraph::isRootNode(SceneNode& node) {
-  auto* parent = node.parent();
+  auto parent = node.parent();
   // if the parent is null, it means the node is the world_ node.
   CORRADE_ASSERT(parent != nullptr,
                  "SceneGraph::isRootNode: the node is illegal.", false);
-  return (parent->parent() == nullptr);
+  return (parent->parent() == nullptr ? true : false);
 }
 
 gfx::DrawableGroup* SceneGraph::getDrawableGroup(const std::string& id) {
@@ -35,7 +47,7 @@ const gfx::DrawableGroup* SceneGraph::getDrawableGroup(
 }
 
 bool SceneGraph::deleteDrawableGroup(const std::string& id) {
-  return drawableGroups_.erase(id) != 0u;
+  return drawableGroups_.erase(id);
 }
 
 }  // namespace scene

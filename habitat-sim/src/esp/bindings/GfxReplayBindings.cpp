@@ -1,8 +1,8 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
-#include "esp/bindings/Bindings.h"
+#include "esp/bindings/bindings.h"
 
 #include <Magnum/PythonBindings.h>
 #include <Magnum/SceneGraph/PythonBindings.h>
@@ -39,11 +39,7 @@ void initGfxReplayBindings(py::module& m) {
                                py::make_tuple(translation, rotation))
                          : py::cast<py::object>(Py_None);
           },
-          R"(Get a previously-added user transform. See also ReplayManager.add_user_transform_to_keyframe.)")
-
-      .def(
-          "close", &Player::close,
-          R"(Unload all keyframes. The Player is unusable after it is closed.)");
+          R"(Get a previously-added user transform. See also ReplayManager.add_user_transform_to_keyframe.)");
 
   py::class_<ReplayManager, ReplayManager::ptr>(m, "ReplayManager")
       .def(
@@ -56,20 +52,7 @@ void initGfxReplayBindings(py::module& m) {
             }
             self.getRecorder()->saveKeyframe();
           },
-          R"(Save a render keyframe. A render keyframe can be loaded later and used to draw observations.)")
-
-      .def(
-          "extract_keyframe",
-          [](ReplayManager& self) {
-            if (!self.getRecorder()) {
-              throw std::runtime_error(
-                  "replay save not enabled. See "
-                  "SimulatorConfiguration.enable_gfx_replay_save.");
-            }
-            return self.getRecorder()->keyframeToString(
-                self.getRecorder()->extractKeyframe());
-          },
-          R"(Extract the current keyframe as a JSON-formatted string.)")
+          R"(Save a render keyframe; a render keyframe can be loaded later and used to draw observations.)")
 
       .def(
           "add_user_transform_to_keyframe",
@@ -84,7 +67,7 @@ void initGfxReplayBindings(py::module& m) {
             self.getRecorder()->addUserTransformToKeyframe(name, translation,
                                                            rotation);
           },
-          R"(Add a user transform to the current render keyframe. It will get stored with the keyframe and will be available later upon loading the keyframe.)")
+          R"(Add a user transform to the current render keyframe; it will get stored with the keyframe and will be available later upon loading the keyframe)")
 
       .def(
           "write_saved_keyframes_to_file",
@@ -98,57 +81,8 @@ void initGfxReplayBindings(py::module& m) {
           },
           R"(Write all saved keyframes to a file, then discard the keyframes.)")
 
-      .def(
-          "write_saved_keyframes_to_string",
-          [](ReplayManager& self) {
-            if (!self.getRecorder()) {
-              throw std::runtime_error(
-                  "replay save not enabled. See "
-                  "SimulatorConfiguration.enable_gfx_replay_save.");
-            }
-            return self.getRecorder()->writeSavedKeyframesToString();
-          },
-          R"(Write all saved keyframes to a string, then discard the keyframes.)")
-
-      .def(
-          "write_incremental_saved_keyframes_to_string_array",
-          [](ReplayManager& self) {
-            if (!self.getRecorder()) {
-              throw std::runtime_error(
-                  "replay save not enabled. See "
-                  "SimulatorConfiguration.enable_gfx_replay_save.");
-            }
-            return self.getRecorder()
-                ->writeIncrementalSavedKeyframesToStringArray();
-          },
-          R"(Write all saved keyframes to individual strings. See Recorder.h for details.)")
-
       .def("read_keyframes_from_file", &ReplayManager::readKeyframesFromFile,
-           R"(Create a Player object from a replay file.)")
-
-      .def(
-          "set_max_decimal_places",
-          [](ReplayManager& self, int maxDecimalPlaces) {
-            if (!self.getRecorder()) {
-              throw std::runtime_error(
-                  "Replay save not enabled. See "
-                  "SimulatorConfiguration.enable_gfx_replay_save.");
-            }
-            self.getRecorder()->setMaxDecimalPlaces(maxDecimalPlaces);
-          },
-          R"(Set the precision of the floating points serialized by this recorder.)")
-
-      .def(
-          "get_max_decimal_places",
-          [](ReplayManager& self) {
-            if (!self.getRecorder()) {
-              throw std::runtime_error(
-                  "Replay save not enabled. See "
-                  "SimulatorConfiguration.enable_gfx_replay_save.");
-            }
-            return self.getRecorder()->getMaxDecimalPlaces();
-          },
-          R"(Get the precision of the floating points serialized by this recorder.)");
+           R"(Create a Player object from a replay file.)");
 }
 
 }  // namespace replay

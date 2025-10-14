@@ -1,12 +1,12 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_NAV_GREEDYFOLLOWER_H_
 #define ESP_NAV_GREEDYFOLLOWER_H_
 
-#include "esp/core/Esp.h"
 #include "esp/core/RigidState.h"
+#include "esp/core/esp.h"
 #include "esp/nav/PathFinder.h"
 #include "esp/scene/SceneGraph.h"
 #include "esp/scene/SceneNode.h"
@@ -34,7 +34,7 @@ class GreedyGeodesicFollowerImpl {
    * @brief Ouputs from the greedy follower.
    *
    * Used to specify which action to take next
-   * or that an error occurred
+   * or that an error occured
    */
   enum class CODES : int {
     ERROR = -2,
@@ -75,9 +75,9 @@ class GreedyGeodesicFollowerImpl {
                              MoveFn& moveForward,
                              MoveFn& turnLeft,
                              MoveFn& turnRight,
-                             float goalDist,
-                             float forwardAmount,
-                             float turnAmount,
+                             double goalDist,
+                             double forwardAmount,
+                             double turnAmount,
                              bool fixThrashing = true,
                              int thrashingThreshold = 16);
 
@@ -115,7 +115,7 @@ class GreedyGeodesicFollowerImpl {
   /**
    * @brief Reset the planner.
    *
-   * Should be called whenever a different goal is chosen or start state
+   * Should be called whenever a different goal is choosen or start state
    * differs by more than action from the last start state
    */
   void reset();
@@ -123,7 +123,7 @@ class GreedyGeodesicFollowerImpl {
  private:
   PathFinder::ptr pathfinder_;
   MoveFn moveForward_, turnLeft_, turnRight_;
-  const float forwardAmount_, goalDist_, turnAmount_;
+  const double forwardAmount_, goalDist_, turnAmount_;
   const bool fixThrashing_;
   const int thrashingThreshold_;
   const float closeToObsThreshold_ = 0.2f;
@@ -151,7 +151,7 @@ class GreedyGeodesicFollowerImpl {
 
   float computeReward(const scene::SceneNode& node,
                       const nav::ShortestPath& path,
-                      size_t primLen);
+                      const size_t primLen);
 
   bool isThrashing();
 

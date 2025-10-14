@@ -1,17 +1,20 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
 #ifndef ESP_SCENE_SCENEGRAPH_H
 #define ESP_SCENE_SCENEGRAPH_H
 
-#include <Magnum/SceneGraph/Scene.h>
 #include <unordered_map>
-#include "esp/core/Esp.h"
+
+#include "esp/core/esp.h"
 #include "esp/gfx/magnum.h"
 
 #include "SceneNode.h"
 #include "esp/gfx/DrawableGroup.h"
+#include "esp/gfx/RenderCamera.h"
+
+#include "esp/sensor/VisualSensor.h"
 
 namespace esp {
 namespace scene {
@@ -20,18 +23,25 @@ class SceneGraph {
   using DrawableGroups = std::unordered_map<std::string, gfx::DrawableGroup>;
 
   SceneGraph();
-  virtual ~SceneGraph() { ESP_DEBUG() << "Deconstructing SceneGraph"; };
+  virtual ~SceneGraph() { LOG(INFO) << "Deconstructing SceneGraph"; };
 
   SceneNode& getRootNode() { return rootNode_; }
   const SceneNode& getRootNode() const { return rootNode_; }
 
-  gfx::DrawableGroup& getDrawables(const std::string& groupName = {}) {
-    return drawableGroups_.at(groupName);
+  // TODO: remove this
+  gfx::DrawableGroup& getDrawables() {
+    return drawableGroups_.at(std::string{});
   }
-  const gfx::DrawableGroup& getDrawables(
-      const std::string& groupName = {}) const {
-    return drawableGroups_.at(groupName);
+  const gfx::DrawableGroup& getDrawables() const {
+    return drawableGroups_.at(std::string{});
   }
+
+  // set the transformation, projection matrix to the default camera
+  // TODO:
+  // in the future, the parameter should be VisualSensor
+  void setDefaultRenderCamera(sensor::VisualSensor& sensor);
+
+  gfx::RenderCamera& getDefaultRenderCamera() { return defaultRenderCamera_; }
 
   /* @brief check if the scene node is the root node of the scene graph.
    */
@@ -70,17 +80,17 @@ class SceneGraph {
    *  @ref DrawableGroup with the same ID already exists.
    */
   template <typename... DrawableGroupArgs>
-  gfx::DrawableGroup* createDrawableGroup(const std::string& id,
+  gfx::DrawableGroup* createDrawableGroup(std::string id,
                                           DrawableGroupArgs&&... args) {
     auto inserted = drawableGroups_.emplace(
-        std::piecewise_construct, std::forward_as_tuple(id),
+        std::piecewise_construct, std::forward_as_tuple(std::move(id)),
         std::forward_as_tuple(std::forward<DrawableGroupArgs>(args)...));
     if (!inserted.second) {
-      ESP_ERROR() << "DrawableGroup with ID:" << inserted.first->first
-                  << "already exists!";
+      LOG(ERROR) << "DrawableGroup with ID: " << inserted.first->first
+                 << " already exists!";
       return nullptr;
     }
-    ESP_DEBUG() << "Created DrawableGroup:" << inserted.first->first;
+    LOG(INFO) << "Created DrawableGroup: " << inserted.first->first;
     return &inserted.first->second;
   }
 
@@ -108,11 +118,19 @@ class SceneGraph {
   // DO NOT add any other transformation in between!!
   SceneNode rootNode_{world_};
 
+  // Again, order matters! do not change the sequence!!
+  // CANNOT make defaultRenderCameraNode_ specified BEFORE rootNode_.
+  SceneNode defaultRenderCameraNode_{rootNode_};
+
+  // a default camera to render the scene
+  // user can of course define her own RenderCamera for rendering
+  gfx::RenderCamera defaultRenderCamera_;
+
   // ==== Drawables ====
   // for each scene node in a scene graph,
-  // we create a drawable object (e.g., InstanceMeshDrawable, etc.) and add it
-  // to the drawable group of that scene. This is done on the fly when we build
-  // the scene graph
+  // we create a drawable object (e.g., PTexMeshDrawable, InstanceMeshDrawable,
+  // etc.) and add it to the drawable group of that scene. This is done on the
+  // fly when we build the scene graph
 
   // drawable groups for this scene graph
   // This is a mapping from (groupID -> group of drawables).

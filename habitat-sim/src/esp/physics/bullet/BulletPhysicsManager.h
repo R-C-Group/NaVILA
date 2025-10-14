@@ -1,4 +1,4 @@
-// Copyright (c) Meta Platforms, Inc. and its affiliates.
+// Copyright (c) Facebook, Inc. and its affiliates.
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 
@@ -15,20 +15,16 @@
 #include <Magnum/BulletIntegration/MotionState.h>
 #include <btBulletDynamicsCommon.h>
 
-#include "BulletDynamics/ConstraintSolver/btFixedConstraint.h"
-#include "BulletDynamics/ConstraintSolver/btPoint2PointConstraint.h"
 #include "BulletDynamics/Featherstone/btMultiBodyConstraintSolver.h"
-#include "BulletDynamics/Featherstone/btMultiBodyFixedConstraint.h"
-#include "BulletDynamics/Featherstone/btMultiBodyPoint2Point.h"
-
-#include "BulletCollisionHelper.h"
 #include "BulletDynamics/Featherstone/btMultiBodyDynamicsWorld.h"
+
+#include "BulletRigidObject.h"
+#include "BulletRigidStage.h"
 #include "esp/physics/PhysicsManager.h"
-#include "esp/physics/bullet/BulletArticulatedObject.h"
+#include "esp/physics/bullet/BulletRigidObject.h"
 
 namespace esp {
 namespace physics {
-class BulletArticulatedObject;
 
 /**
 @brief Dynamic stage and object manager interfacing with Bullet physics
@@ -47,7 +43,7 @@ class BulletPhysicsManager : public PhysicsManager {
  public:
   /**
    * @brief Construct a @ref BulletPhysicsManager with access to specific
-   * resources assets.
+   * resourse assets.
    *
    * @param _resourceManager The @ref esp::assets::ResourceManager which
    * tracks the assets this
@@ -55,48 +51,17 @@ class BulletPhysicsManager : public PhysicsManager {
    */
   explicit BulletPhysicsManager(
       assets::ResourceManager& _resourceManager,
-      const std::shared_ptr<
-          const metadata::attributes::PhysicsManagerAttributes>&
-          _physicsManagerAttributes);
+      const metadata::attributes::PhysicsManagerAttributes::cptr
+          _physicsManagerAttributes)
+      : PhysicsManager(_resourceManager, _physicsManagerAttributes) {
+    collisionObjToObjIds_ =
+        std::make_shared<std::map<const btCollisionObject*, int>>();
+  };
 
   /** @brief Destructor which destructs necessary Bullet physics structures.*/
-  ~BulletPhysicsManager() override;
+  virtual ~BulletPhysicsManager();
 
   //============ Simulator functions =============
-
-  /**
-   * @brief Use the metadata stored in metadata::URDF::Link to instance all
-   * visual shapes for a link into the SceneGraph.
-   *
-   * @param linkObject The Habitat-side ArticulatedLink to which visual shapes
-   * will be attached.
-   * @param link The metadata::URDF::Model's link with visual shape and
-   * transform metadata.
-   * @param drawables The SceneGraph's DrawableGroup with which the visual
-   * shapes will be rendered.
-   * @param lightSetup The string name of the desired lighting setup to use.
-   *
-   * @return Whether or not the render shape instancing was successful.
-   */
-  bool attachLinkGeometry(ArticulatedLink* linkObject,
-                          const std::shared_ptr<metadata::URDF::Link>& link,
-                          gfx::DrawableGroup* drawables,
-                          const std::string& lightSetup,
-                          int semanticId);
-
-  /**
-   * @brief Override of @ref PhysicsManager::removeObject to also remove any
-   * active Bullet physics constraints for the object.
-   */
-  void removeObject(int objectId,
-                    bool deleteObjectNode = true,
-                    bool deleteVisualNode = true) override;
-
-  /**
-   * @brief Override of @ref PhysicsManager::removeArticulatedObject to also
-   * remove any active Bullet physics constraints for the object.
-   */
-  void removeArticulatedObject(int objectId) override;
 
   /** @brief Step the physical world forward in time. Time may only advance in
    * increments of @ref fixedTimeStep_. See @ref
@@ -121,22 +86,41 @@ class BulletPhysicsManager : public PhysicsManager {
 
   //============ Bullet-specific Object Setter functions =============
 
+  /** @brief Set the scalar collision margin of an object.
+   * See @ref BulletRigidObject::setMargin.
+   * @param  physObjectID The object ID and key identifying the object in @ref
+   * PhysicsManager::existingObjects_.
+   * @param  margin The desired collision margin for the object.
+   */
+  void setMargin(const int physObjectID, const double margin) override;
+
   /** @brief Set the friction coefficient of the stage collision geometry. See
    * @ref staticStageObject_. See @ref
    * BulletRigidObject::setFrictionCoefficient.
    * @param frictionCoefficient The scalar friction coefficient of the stage
    * geometry.
    */
-  void setStageFrictionCoefficient(double frictionCoefficient) override;
+  void setStageFrictionCoefficient(const double frictionCoefficient) override;
 
   /** @brief Set the coefficient of restitution for the stage collision
    * geometry. See @ref staticStageObject_. See @ref
    * BulletRigidObject::setRestitutionCoefficient.
    * @param restitutionCoefficient The scalar coefficient of restitution to set.
    */
-  void setStageRestitutionCoefficient(double restitutionCoefficient) override;
+  void setStageRestitutionCoefficient(
+      const double restitutionCoefficient) override;
 
   //============ Bullet-specific Object Getter functions =============
+
+  /** @brief Get the scalar collision margin of an object.
+   * See @ref BulletRigidObject::getMargin.
+   * @param  physObjectID The object ID and key identifying the object in @ref
+   * PhysicsManager::existingObjects_.
+   * @return The scalar collision margin of the object or @ref
+   * esp::PHYSICS_ATTR_UNDEFINED if failed..
+   */
+  double getMargin(const int physObjectID) const override;
+
   /** @brief Get the current friction coefficient of the stage collision
    * geometry. See @ref staticStageObject_ and @ref
    * BulletRigidObject::getFrictionCoefficient.
@@ -146,7 +130,7 @@ class BulletPhysicsManager : public PhysicsManager {
 
   /** @brief Get the current coefficient of restitution for the stage
    * collision geometry. This determines the ratio of initial to final relative
-   * velocity between the stage and colliding object. See @ref
+   * velocity between the stage and collidiing object. See @ref
    * staticStageObject_ and BulletRigidObject::getRestitutionCoefficient.
    * @return The scalar coefficient of restitution for the stage geometry.
    */
@@ -159,14 +143,14 @@ class BulletPhysicsManager : public PhysicsManager {
    * PhysicsManager::existingObjects_.
    * @return The Aabb.
    */
-  Magnum::Range3D getCollisionShapeAabb(int physObjectID) const;
+  const Magnum::Range3D getCollisionShapeAabb(const int physObjectID) const;
 
   /**
    * @brief Query the Aabb from bullet physics for the root compound shape of
    * the static stage in its local space. See @ref btCompoundShape::getAabb.
    * @return The stage collision Aabb.
    */
-  Magnum::Range3D getStageCollisionShapeAabb() const;
+  const Magnum::Range3D getStageCollisionShapeAabb() const;
 
   /** @brief Render the debugging visualizations provided by @ref
    * Magnum::BulletIntegration::DebugDraw. This draws wireframes for all
@@ -174,16 +158,18 @@ class BulletPhysicsManager : public PhysicsManager {
    * @param projTrans The composed projection and transformation matrix for the
    * render camera.
    */
-  void debugDraw(const Magnum::Matrix4& projTrans) const override;
+  virtual void debugDraw(const Magnum::Matrix4& projTrans) const override;
 
   /**
-   * @brief Return ContactPointData objects describing the contacts from the
-   * most recent physics substep.
+   * @brief Check whether an object is in contact with any other objects or the
+   * stage.
    *
-   * This implementation is roughly identical to PyBullet's getContactPoints.
-   * @return a vector with each entry corresponding to a single contact point.
+   * @param physObjectID The object ID and key identifying the object in @ref
+   * PhysicsManager::existingObjects_.
+   * @return Whether or not the object is in contact with any other collision
+   * enabled objects.
    */
-  std::vector<ContactPointData> getContactPoints() const override;
+  bool contactTest(const int physObjectID) override;
 
   /**
    * @brief Cast a ray into the collision world and return a @ref RaycastResults
@@ -193,142 +179,19 @@ class BulletPhysicsManager : public PhysicsManager {
    * distances will be in units of ray length.
    * @param maxDistance The maximum distance along the ray direction to search.
    * In units of ray length.
-   * @param bufferDistance The casts the ray from this distance behind the
-   * origin in the inverted ray direction to avoid errors related to casting
-   * rays inside a collision shape's margin.
    * @return The raycast results sorted by distance.
    */
-  RaycastResults castRay(const esp::geo::Ray& ray,
-                         double maxDistance = 100.0,
-                         double bufferDistance = 0.08) override;
+  virtual RaycastResults castRay(const esp::geo::Ray& ray,
+                                 double maxDistance = 100.0) override;
 
-  /**
-   * @brief Query the number of contact points that were active during the
-   * collision detection check.
-   *
-   * An object resting on another object will involve several active contact
-   * points. Once both objects are asleep, the contact points are inactive. This
-   * count can be used as a metric for the complexity/cost of collision-handling
-   * in the current scene.
-   *
-   * @return the number of active contact points.
-   */
-  int getNumActiveContactPoints() override {
-    return BulletCollisionHelper::get().getNumActiveContactPoints(
-        bWorld_.get());
-  }
-
-  /**
-   * @brief Query the number of overlapping pairs that were active during the
-   * collision detection check.
-   *
-   * When object bounding boxes overlap and either object is active, additional
-   * "narrowphase" collision-detection must be run. This count is a proxy for
-   * complexity/cost of collision-handling in the current scene. See also
-   * getNumActiveContactPoints.
-   *
-   * @return the number of active overlapping pairs.
-   */
-  int getNumActiveOverlappingPairs() override {
-    return BulletCollisionHelper::get().getNumActiveOverlappingPairs(
-        bWorld_.get());
-  }
-
-  /**
-   * @brief Get a summary of collision-processing from the last physics step.
-   */
-  std::string getStepCollisionSummary() override {
-    return BulletCollisionHelper::get().getStepCollisionSummary(bWorld_.get());
-  }
-
-  /**
-   * @brief Perform discrete collision detection for the scene.
-   */
-  void performDiscreteCollisionDetection() override {
-    bWorld_->getCollisionWorld()->performDiscreteCollisionDetection();
-    recentNumSubStepsTaken_ = -1;  // TODO: handle this more gracefully
-  }
-
-  //============ Rigid Constraints =============
-
-  /**
-   * @brief Create a rigid constraint between two objects or an object and the
-   * world.
-   *
-   * @param settings The datastructure defining the constraint parameters.
-   *
-   * @return The id of the newly created constraint or ID_UNDEFINED if failed.
-   */
-  int createRigidConstraint(const RigidConstraintSettings& settings) override;
-
-  /**
-   * @brief Update the settings of a rigid constraint.
-   *
-   * @param constraintId The id of the constraint to update.
-   * @param settings The new settings of the constraint.
-   */
-  void updateRigidConstraint(int constraintId,
-                             const RigidConstraintSettings& settings) override;
-
-  /**
-   * @brief Remove a rigid constraint by id.
-   *
-   * @param constraintId The id of the constraint to remove.
-   */
-  void removeRigidConstraint(int constraintId) override;
-
-  /**
-   * @brief utilize PhysicsManager's enable shared
-   */
-  BulletPhysicsManager::ptr shared_from_this() {
-    return esp::shared_from(this);
-  }
+  // The number of contact points that were active during the last step. An
+  // object resting on another object will involve several active contact
+  // points. Once both objects are asleep, the contact points are inactive. This
+  // count can be used as a metric for the complexity/cost of collision-handling
+  // in the current scene.
+  int getNumActiveContactPoints() override;
 
  protected:
-  /**
-   * @brief Load, parse, and import a URDF file instantiating an @ref
-   * ArticulatedObject in the world based on the urdf filepath specified in @ref
-   * esp::metadata::attributes::ArticulatedObjectAttributes. This version
-   * requires drawables to be provided.
-   *
-   * @param artObjAttributes The @ref ArticulatedObject's template to use to create it.
-   * @param drawables Reference to the scene graph drawables group to enable
-   * rendering of the newly initialized @ref ArticulatedObject.
-   * @param forceReload If true, force the reload of the source URDF from file,
-   * replacing the cached model if it exists.
-   * @param lightSetup The string name of the desired lighting setup to use.
-   *
-   * @return The instanced @ref ArticulatedObject 's ID, mapping to the articulated
-   * object in @ref PhysicsManager::existingObjects_ if successful, or
-   * @ref esp::ID_UNDEFINED. These values come from the same pool used
-   * by rigid objects.
-   */
-  int addArticulatedObjectInternal(
-      const esp::metadata::attributes::ArticulatedObjectAttributes::ptr&
-          artObjAttributes,
-      DrawableGroup* drawables,
-      bool forceReload = false,
-      const std::string& lightSetup = DEFAULT_LIGHTING_KEY) override;
-
-  //! counter for constraint id generation
-  int nextConstraintId_ = 0;
-  //! caches for various types of Bullet rigid constraint objects.
-  std::unordered_map<int, std::unique_ptr<btMultiBodyPoint2Point>>
-      articulatedP2PConstraints_;
-  std::unordered_map<int, std::unique_ptr<btMultiBodyFixedConstraint>>
-      articulatedFixedConstraints_;
-  std::unordered_map<int, std::unique_ptr<btPoint2PointConstraint>>
-      rigidP2PConstraints_;
-  std::unordered_map<int, std::unique_ptr<btFixedConstraint>>
-      rigidFixedConstraints_;
-  //! when constraining objects to the global frame, a dummy object with 0 mass
-  //! is required.
-  std::unique_ptr<btRigidBody> globalFrameObject = nullptr;
-
-  //! Maps object ids to a list of active constraints referencing the object for
-  //! use in constraint clean-up and object sleep state management.
-  std::unordered_map<int, std::vector<int>> objectConstraints_;
-
   //============ Initialization =============
   /**
    * @brief Finalize physics initialization: Setup staticStageObject_ and
@@ -336,44 +199,31 @@ class BulletPhysicsManager : public PhysicsManager {
    */
   bool initPhysicsFinalize() override;
 
-  /**
-   * @brief Create an object wrapper appropriate for this physics manager.
-   * Overridden if called by dynamics-library-enabled PhysicsManager
-   */
-  esp::physics::ManagedRigidObject::ptr getRigidObjectWrapper() override;
-
-  /**
-   * @brief Create an articulated object wrapper appropriate for this physics
-   * manager. Overridden if called by dynamics-library-enabled PhysicsManager
-   */
-  esp::physics::ManagedArticulatedObject::ptr getArticulatedObjectWrapper()
-      override;
-
   //============ Object/Stage Instantiation =============
   /**
    * @brief Finalize stage initialization. Checks that the collision
    * mesh can be used by Bullet. See @ref BulletRigidObject::initializeStage.
    * Bullet mesh conversion adapted from:
    * https://github.com/mosra/magnum-integration/issues/20
-   * @param initAttributes The attributes structure defining physical
+   * @param handle The handle of the attributes structure defining physical
    * properties of the stage.
    * @return true if successful and false otherwise
    */
-  bool addStageFinalize(const metadata::attributes::StageAttributes::ptr&
-                            initAttributes) override;
+  bool addStageFinalize(const std::string& handle) override;
 
   /** @brief Create and initialize an @ref RigidObject and add
    * it to existingObjects_ map keyed with newObjectID
    * @param newObjectID valid object ID for the new object
-   * @param objectAttributes The object's template
+   * @param meshGroup The object's mesh.
+   * @param handle The handle to the physical object's template defining its
+   * physical parameters.
    * @param objectNode Valid, existing scene node
    * @return whether the object has been successfully initialized and added to
    * existingObjects_ map
    */
-  bool makeAndAddRigidObject(
-      int newObjectID,
-      const esp::metadata::attributes::ObjectAttributes::ptr& objectAttributes,
-      scene::SceneNode* objectNode) override;
+  bool makeAndAddRigidObject(int newObjectID,
+                             const std::string& handle,
+                             scene::SceneNode* objectNode) override;
 
   btDbvtBroadphase bBroadphase_;
   btDefaultCollisionConfiguration bCollisionConfig_;
@@ -384,73 +234,23 @@ class BulletPhysicsManager : public PhysicsManager {
   /** @brief A pointer to the Bullet world. See @ref btMultiBodyDynamicsWorld.*/
   std::shared_ptr<btMultiBodyDynamicsWorld> bWorld_;
 
-  mutable std::unique_ptr<Magnum::BulletIntegration::DebugDraw> debugDrawer_;
+  mutable Magnum::BulletIntegration::DebugDraw debugDrawer_;
 
   //! keep a map of collision objects to object ids for quick lookups from
   //! Bullet collision checking.
   std::shared_ptr<std::map<const btCollisionObject*, int>>
       collisionObjToObjIds_;
 
-  //! necessary to acquire forces from impulses
-  double recentTimeStep_ = fixedTimeStep_;
-  //! for recent call to stepPhysics
-  int recentNumSubStepsTaken_ = -1;
-
  private:
-  /**
-   * @brief Helper function for getting object and link unique ids from
-   * btCollisionObject cache
-   *
-   * @param colObj The query collision object for which a corresponding id is
-   * desired.
-   * @param objectId write found RigidObject or ArticulatedObject id or -1 if
-   * failed.
-   * @param linkId write found linkId or -1 if failed or not an ArticulatedLink.
+  /** @brief Check if a particular mesh can be used as a collision mesh for
+   * Bullet.
+   * @param meshData The mesh to validate. Only a triangle mesh is valid. Checks
+   * that the only #ref Magnum::MeshPrimitive are @ref
+   * Magnum::MeshPrimitive::Triangles.
+   * @return true if valid, false otherwise.
    */
-  void lookUpObjectIdAndLinkId(const btCollisionObject* colObj,
-                               int* objectId,
-                               int* linkId) const;
+  bool isMeshPrimitiveValid(const assets::CollisionMeshData& meshData) override;
 
-  /**
-   * @brief Helper function for removing all rigid constraints referencing an
-   * object.
-   *
-   * @param objectId The unique id for the rigid or articulated object.
-   */
-  void removeObjectRigidConstraints(int objectId) {
-    auto objConstraintIter = objectConstraints_.find(objectId);
-    if (objConstraintIter != objectConstraints_.end()) {
-      for (auto c_id : objConstraintIter->second) {
-        removeRigidConstraint(c_id);
-      }
-      objectConstraints_.erase(objectId);
-    }
-  };
-
-  /**
-   * @brief Helper function for instantiating a skinned model associated to the
-   * articulated object. The model bones are driven by parenting them to their
-   * associated articulated object links by string-matching.
-   *
-   * @param ao Articulated object upon which the skinned model instance is
-   * attached.
-   * @param renderAssetPath Path of the skinned model.
-   * @param parentNode Scene node that will be the parent of the skinned model
-   * instance.
-   * @param drawables Drawable group associated with the skinned model instance.
-   * @param lightSetupKey Light setup associated with the skinned model
-   * instance.
-   */
-  void instantiateSkinnedModel(
-      const std::shared_ptr<BulletArticulatedObject>& ao,
-      const esp::metadata::attributes::ArticulatedObjectAttributes::ptr&
-          artObjAttributes,
-      const std::string& renderAssetPath,
-      scene::SceneNode* parentNode,
-      DrawableGroup* drawables,
-      const std::string& lightSetupKey);
-
- public:
   ESP_SMART_POINTERS(BulletPhysicsManager)
 
 };  // end class BulletPhysicsManager
