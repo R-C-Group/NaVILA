@@ -78,6 +78,8 @@ python setup.py install --headless --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=
 #include <cstdint> // 确保包含uint16_t定义
 ```
 
+安装后用命令查看是否都是0.1.7: `pip list | grep habitat`
+
 3. 安装VLN-CE依赖
 
 ```bash
