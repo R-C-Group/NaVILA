@@ -154,13 +154,14 @@ print("模型下载到本地路径:", local_dir)
 ```bash
 # conda create -n mp3d python=2.7
 # conda activate mp3d
-python download_mp.py --task_data habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets/mp3d/ --id 17DRP5sb8fy
-python download_mp.py --task_data habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets/mp3d/ --id 8194nk5LbLH
-# 数据实在太大了，也可以尝试从链接：https://cloud.tsinghua.edu.cn/f/03e0ca1430a344efa72b/?dl=1下载
+# python download_mp.py --task_data habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets/mp3d/ --id 17DRP5sb8fy
+python download_mp.py --task habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets6/mp3d/ --id 17DRP5sb8fy
+# python download_mp.py --task minos -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets6/mp3d/
+# 数据实在太大了，也可以尝试从链接：https://cloud.tsinghua.edu.cn/f/03e0ca1430a344efa72b/?dl=1下载，但似乎是没有用的
 
+# 也尝试了用habitat-sim提供的下载但也不work
 # conda activate navila-eval
 # cd habitat-sim/
-# python setup.py build_ext --parallel 2 --headless
 # python -m habitat_sim.utils.datasets_download --uids mp3d_example_scene --data-path /home/guanweipeng/NaVILA/evaluation/data/
 ```
 
@@ -215,3 +216,4 @@ python setup.py install --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE
 # 参考资料
 * [habitat-sim](https://github.com/facebookresearch/habitat-sim/tree/v0.1.7#installation)
 * [habitat-lab](https://github.com/facebookresearch/habitat-lab)
+* [MatterPort3D 数据集 多途径下载](https://blog.csdn.net/qq_41204464/article/details/149549133)
