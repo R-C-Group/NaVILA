@@ -40,6 +40,10 @@ python -m pip install -r habitat_baselines/rl/requirements.txt
 # 注意，其中的tensorflow==1.13.1似乎已经不支持安装了，改为tensorflow>=2.8.0
 python -m pip install -r habitat_baselines/rl/ddppo/requirements.txt
 python setup.py develop --all
+
+# #验证
+# conda activate navila-eval
+# CUDA_VISIBLE_DEVICES=1 python examples/example.py --scene /data/scene_datasets/habitat-test-scenes/skokloster-castle.glb
 ```
 
 
@@ -68,7 +72,10 @@ sudo apt-get install libgl1-mesa-dev
 sudo apt-get install libegl1-mesa-dev
 pip install --upgrade pybind11
 # rm -rf build
-python setup.py install --headless --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD=11"
+# python setup.py install --headless --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD=11"
+# python setup.py install --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD=11"
+python setup.py install --with-cuda --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD=11"
+
 ```
 
 * Habitat-Sim的源码编译[参考](https://github.com/facebookresearch/habitat-sim/blob/v0.1.7/BUILD_FROM_SOURCE.md)
@@ -148,10 +155,13 @@ print("模型下载到本地路径:", local_dir)
 # conda create -n mp3d python=2.7
 # conda activate mp3d
 python download_mp.py --task_data habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets/mp3d/ --id 17DRP5sb8fy
+python download_mp.py --task_data habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets/mp3d/ --id 8194nk5LbLH
+# 数据实在太大了，也可以尝试从链接：https://cloud.tsinghua.edu.cn/f/03e0ca1430a344efa72b/?dl=1下载
 
-conda activate navila-eval
-cd habitat-sim/
-# python -m habitat_sim.utils.datasets_download --uids mp3d_example_scene --data-path data/
+# conda activate navila-eval
+# cd habitat-sim/
+# python setup.py build_ext --parallel 2 --headless
+# python -m habitat_sim.utils.datasets_download --uids mp3d_example_scene --data-path /home/guanweipeng/NaVILA/evaluation/data/
 ```
 
 验证R2R：
@@ -161,6 +171,7 @@ cd evaluation
 conda activate navila-eval
 # bash scripts/eval/r2r.sh CKPT_PATH NUM_CHUNKS CHUNK_START_IDX "GPU_IDS"
 bash scripts/eval/r2r.sh /home/guanweipeng/NaVILA/navila-llama3-8b-8f 1 0 "0"
+# bash scripts/eval/r2r.sh /home/guanweipeng/NaVILA/navila-llama3-8b-8f 2 0 "1,2"
 ```
 
 若报错`ImportError: /home/guanweipeng/anaconda3/envs/navila-eval/bin/../lib/libstdc++.so.6: version GLIBCXX_3.4.32 not found (required by /home/guanweipeng/anaconda3/envs/navila-eval/lib/python3.10/site-packages/_magnum.cpython-310-x86_64-linux-gnu.so)`,先查看环境中的libstdc++.so.6是否包含GLIBCXX_3.4.32
@@ -171,6 +182,33 @@ strings /home/guanweipeng/anaconda3/envs/navila-eval/lib/libstdc++.so.6 | grep G
 conda install -c conda-forge libstdcxx-ng
 ```
 
+* 对于无显示器情况,或者GPU不能跑图形的情况`unable to find EGL device for cuDA device 0`：
+
+```bash
+#安装 OpenGL 开发库
+sudo apt install libgl1-mesa-dev
+#安装 GLFW 库
+sudo apt install libglfw3-dev
+# 安装 GLEW 库
+sudo apt install libglew-dev
+
+# 安装虚拟显示
+sudo apt install xvfb
+
+# 使用Xvfb运行
+xvfb-run -a -s "-screen 0 1024x768x24" bash scripts/eval/r2r.sh /home/guanweipeng/NaVILA/navila-llama3-8b-8f 1 0 "0"
+
+#查看安装的pyopengl版本 
+pip install --upgrade PyOpenGL PyOpenGL_accelerate
+#检查EGL版本
+ldconfig -p | grep EGL
+ldconfig -N -v | grep libEGL
+
+# 最终通过重新安装habitat-sim不为headlee版本似乎可以解决~
+python setup.py install --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD=11"
+```
+
+* 对于报错跟数据集相关的，比如找不到mp3d或者Navmesh都需要重新确保mp3d数据的下载
 
 可视化的视频存放在：`./eval_out/CKPT_NAME/VLN-CE-v1/val_unseen/videos`
 
