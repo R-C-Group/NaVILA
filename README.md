@@ -84,7 +84,29 @@ python setup.py install --headless --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=
 pip install -r evaluation/requirements.txt
 ```
 
-4. 安装VILA依赖
+4. 安装VILA依赖(注意要回到根目录)
+
+```bash
+# Install FlashAttention2
+pip install https://github.com/Dao-AILab/flash-attention/releases/download/v2.5.8/flash_attn-2.5.8+cu122torch2.3cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+
+# Install VILA (assum in root dir)
+pip install -e .
+pip install -e ".[train]"
+pip install -e ".[eval]"
+
+# Install HF's Transformers
+pip install git+https://github.com/huggingface/transformers@v4.37.2
+site_pkg_path=$(python -c 'import site; print(site.getsitepackages()[0])')
+cp -rv ./llava/train/transformers_replace/* $site_pkg_path/transformers/
+cp -rv ./llava/train/deepspeed_replace/* $site_pkg_path/deepspeed/
+```
+
+5. 修改VLN-CE的WebDataset版本
+
+```bash
+pip install webdataset==0.1.103
+```
 
 
 ### Hugging Face下载模型
@@ -117,7 +139,38 @@ print("模型下载到本地路径:", local_dir)
 
 ## 实验测试
 
+* 参考[VLN-CE](https://github.com/jacobkrantz/VLN-CE)将R2R 和 RxR 数据下载到`evaluation/data`路径；下载方法请参考：[服务器数据下载](https://kwanwaipang.github.io/File/Blogs/Poster/ubuntu%E5%91%BD%E4%BB%A4%E8%A1%8C%E4%B8%8B%E8%BD%BD%E6%95%B0%E6%8D%AE.html)
+* 然后下载Matterport3D (MP3D) ，通过[网站](https://niessner.github.io/Matterport/)获取download_mp.py
 
+```bash
+# conda create -n mp3d python=2.7
+# conda activate mp3d
+python download_mp.py --task_data habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets/mp3d/ --id 17DRP5sb8fy
+
+conda activate navila-eval
+cd habitat-sim/
+# python -m habitat_sim.utils.datasets_download --uids mp3d_example_scene --data-path data/
+```
+
+验证R2R：
+
+```bash
+cd evaluation
+conda activate navila-eval
+# bash scripts/eval/r2r.sh CKPT_PATH NUM_CHUNKS CHUNK_START_IDX "GPU_IDS"
+bash scripts/eval/r2r.sh /home/guanweipeng/NaVILA/navila-llama3-8b-8f 1 0 "0"
+```
+
+若报错`ImportError: /home/guanweipeng/anaconda3/envs/navila-eval/bin/../lib/libstdc++.so.6: version GLIBCXX_3.4.32 not found (required by /home/guanweipeng/anaconda3/envs/navila-eval/lib/python3.10/site-packages/_magnum.cpython-310-x86_64-linux-gnu.so)`,先查看环境中的libstdc++.so.6是否包含GLIBCXX_3.4.32
+
+```bash
+strings /home/guanweipeng/anaconda3/envs/navila-eval/lib/libstdc++.so.6 | grep GLIBCXX_3.4.
+#执行安装
+conda install -c conda-forge libstdcxx-ng
+```
+
+
+可视化的视频存放在：`./eval_out/CKPT_NAME/VLN-CE-v1/val_unseen/videos`
 
 # 参考资料
 * [habitat-sim](https://github.com/facebookresearch/habitat-sim/tree/v0.1.7#installation)
