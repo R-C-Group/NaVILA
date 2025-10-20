@@ -155,7 +155,7 @@ print("模型下载到本地路径:", local_dir)
 # conda create -n mp3d python=2.7
 # conda activate mp3d
 # python download_mp.py --task_data habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets/mp3d/ --id 17DRP5sb8fy
-python download_mp.py --task habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets6/mp3d/ --id 17DRP5sb8fy
+python download_mp.py --task habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets666/mp3d/ --id 17DRP5sb8fy
 # python download_mp.py --task minos -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets6/mp3d/
 # 数据实在太大了，也可以尝试从链接：https://cloud.tsinghua.edu.cn/f/03e0ca1430a344efa72b/?dl=1下载，但似乎是没有用的
 
