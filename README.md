@@ -211,6 +211,16 @@ python setup.py install --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE
 
 * 对于报错跟数据集相关的，比如找不到mp3d或者Navmesh都需要重新确保mp3d数据的下载
 
+
+但是最终仍然报错：
+
+~~~
+Platform::WindowlessEglApplication::tryCreateContext(): unable to find EGL device for CUDA device 0
+WindowlessContext: Unable to create windowless context
+~~~
+
+
+
 可视化的视频存放在：`./eval_out/CKPT_NAME/VLN-CE-v1/val_unseen/videos`
 
 # 参考资料
