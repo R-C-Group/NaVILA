@@ -11,7 +11,6 @@
 #pragma once
 
 #include "cast.h"
-#include <cstdint> // 确保包含uint16_t定义
 
 PYBIND11_NAMESPACE_BEGIN(PYBIND11_NAMESPACE)
 

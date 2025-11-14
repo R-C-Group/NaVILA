@@ -25,9 +25,8 @@ PS: H200没有图形，因此换为4090再次配置
 1. 创建conda环境
 
 ```bash
-conda create -n navila-eval python=3.10
-conda activate navila-eval
-
+conda create -n navila-eval1 python=3.8
+conda activate navila-eval1
 ```
 
 2. 构建Habitat-Sim & Lab (v0.1.7) 
@@ -52,34 +51,10 @@ python setup.py develop --all
 ```
 
 
-* 对于Habitat-sim的源码安装，参考[Link](https://github.com/facebookresearch/habitat-sim/blob/v0.1.7/BUILD_FROM_SOURCE.md)
+* 对于Habitat-sim的安装
 
 ```bash
-git clone git@github.com:facebookresearch/habitat-sim.git #（默认就是v0.1.7）
-cd habitat-sim
-# git submodule update --init --recursive
-# git checkout v0.1.7
-# git submodule update --init --recursive #注意切换分支后可能导致部分submodule无效
-conda activate navila-eval
-# 为了解决NumPy的问题，运行下面：
-python ../evaluation/scripts/habitat_sim_autofix.py # 更改habitat-sim/habitat_sim/utils/common.py  (更新的代码已经更改了)
-
-pip install -r requirements.txt
-# 如果出现路径问题编译不成功，可能因为之前编译过了，进入到habitat-sim目录删除build(rm -rf build)
-
-# python setup.py install
-# python setup.py install --headless # without an attached display
-pip install cmake
-# sudo apt-get install -y --no-install-recommends \
-#      libjpeg-dev libglm-dev libgl1-mesa-glx libegl1-mesa-dev mesa-utils xorg-dev freeglut3-dev
-sudo apt update
-sudo apt-get install libgl1-mesa-dev
-sudo apt-get install libegl1-mesa-dev
-pip install --upgrade pybind11
-# rm -rf build
-python setup.py install --headless --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD=11"
-# python setup.py install --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD=11"
-# python setup.py install --with-cuda --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD=11"
+conda install -c aihabitat -c conda-forge habitat-sim=0.1.7 headless
 
 ```
 
@@ -164,7 +139,6 @@ print("模型下载到本地路径:", local_dir)
 # conda activate mp3d
 # python download_mp.py --task_data habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets/mp3d/ --id 17DRP5sb8fy
 python download_mp.py --task habitat -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets666/mp3d/ --id 17DRP5sb8fy
-python download_mp.py -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets666/mp3d/ --id zsNo4HB9uLZ
 # python download_mp.py --task minos -o /home/guanweipeng/NaVILA/evaluation/data/scene_datasets6/mp3d/
 # 数据实在太大了，也可以尝试从链接：https://cloud.tsinghua.edu.cn/f/03e0ca1430a344efa72b/?dl=1下载，但似乎是没有用的
 
@@ -228,50 +202,7 @@ Platform::WindowlessEglApplication::tryCreateContext(): unable to find EGL devic
 WindowlessContext: Unable to create windowless context
 ~~~
 
-* 换用4090后，报错
 
-~~~
-cannot get default EGL display: EGL_BAD_PARAMETER 
-WindowlessContext: Unable to create windowless context
-~~~
-
-应该是没有对应驱动的原因，接下来安装驱动：
-
-```bash
-# 添加NVIDIA官方PPA
-sudo add-apt-repository ppa:graphics-drivers/ppa
-sudo apt update
-
-sudo apt install nvidia-driver-550
-sudo reboot
-
-```
-
-* 检查` __GLX_VENDOR_LIBRARY_NAME=nvidia glxinfo | grep -i "opengl"`会发现有NVIDIA了:
-
-~~~
-OpenGL vendor string: NVIDIA Corporation
-OpenGL renderer string: NVIDIA GeForce RTX 4090/PCIe/SSE2
-OpenGL core profile version string: 4.6.0 NVIDIA 550.144.03
-OpenGL core profile shading language version string: 4.60 NVIDIA
-OpenGL core profile context flags: (none)
-OpenGL core profile profile mask: core profile
-OpenGL core profile extensions:
-OpenGL version string: 4.6.0 NVIDIA 550.144.03
-OpenGL shading language version string: 4.60 NVIDIA
-OpenGL context flags: (none)
-OpenGL profile mask: (none)
-OpenGL extensions:
-OpenGL ES profile version string: OpenGL ES 3.2 NVIDIA 550.144.03
-OpenGL ES profile shading language version string: OpenGL ES GLSL ES 3.20
-OpenGL ES profile extensions:
-~~~
-
-* `__GLX_VENDOR_LIBRARY_NAME=nvidia glxinfo | grep "OpenGL renderer"`测试OPENGL
-
-~~~
-OpenGL renderer string: NVIDIA GeForce RTX 4090/PCIe/SSE2
-~~~
 
 可视化的视频存放在：`./eval_out/CKPT_NAME/VLN-CE-v1/val_unseen/videos`
 
