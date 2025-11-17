@@ -220,8 +220,18 @@ python setup.py install --cmake-args="-DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE
 
 * 对于报错跟数据集相关的，比如找不到mp3d或者Navmesh都需要重新确保mp3d数据的下载
 
+```bash
+# 注意下载数据的方式需要如下，这样下载的数据会额外包含tasks文件夹
+python download_mp.py --task habitat -o DATA_PATCH/mp3d --id ID_NAME
+```
 
-但是最终仍然报错：
+<div align="center">
+  <img src="./assets/微信截图_20251117175950.png" width="80%" />
+<figcaption>  
+</figcaption>
+</div>
+
+对于下面报错：
 
 ~~~
 Platform::WindowlessEglApplication::tryCreateContext(): unable to find EGL device for CUDA device 0
@@ -275,7 +285,16 @@ OpenGL renderer string: NVIDIA GeForce RTX 4090/PCIe/SSE2
 
 可视化的视频存放在：`./eval_out/CKPT_NAME/VLN-CE-v1/val_unseen/videos`
 
+而在终端会实时可视化action指令：
+
+<div align="center">
+  <img src="./assets/微信截图_20251117201419.png" width="80%" />
+<figcaption>  
+</figcaption>
+</div>
+
 # 参考资料
 * [habitat-sim](https://github.com/facebookresearch/habitat-sim/tree/v0.1.7#installation)
 * [habitat-lab](https://github.com/facebookresearch/habitat-lab)
 * [MatterPort3D 数据集 多途径下载](https://blog.csdn.net/qq_41204464/article/details/149549133)
+* [关于MP3D没有.glb文件](https://github.com/GuoPingPan/Habitat-Sim-Usage-Chinese/issues/2)
