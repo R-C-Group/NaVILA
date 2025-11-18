@@ -202,12 +202,6 @@ sudo apt install libglfw3-dev
 # 安装 GLEW 库
 sudo apt install libglew-dev
 
-# 安装虚拟显示
-sudo apt install xvfb
-
-# 使用Xvfb运行
-xvfb-run -a -s "-screen 0 1024x768x24" bash scripts/eval/r2r.sh /home/guanweipeng/NaVILA/navila-llama3-8b-8f 1 0 "0"
-
 #查看安装的pyopengl版本 
 pip install --upgrade PyOpenGL PyOpenGL_accelerate
 #检查EGL版本
@@ -292,6 +286,23 @@ OpenGL renderer string: NVIDIA GeForce RTX 4090/PCIe/SSE2
 <figcaption>  
 </figcaption>
 </div>
+
+
+## 实验效果
+
+
+```bash
+cd evaluation
+conda activate navila-eval
+# bash scripts/eval/r2r.sh CKPT_PATH NUM_CHUNKS CHUNK_START_IDX "GPU_IDS"
+bash scripts/eval/r2r.sh /home/guanweipeng/NaVILA/navila-llama3-8b-8f 1 0 "0"
+# bash scripts/eval/r2r.sh /home/guanweipeng/NaVILA/navila-llama3-8b-8f 2 0 "1,2"
+
+# 汇总结果以及查看分数
+# python scripts/eval_jsons.py ./eval_out/CKPT_NAME/VLN-CE-v1/val_unseen NUM_CHUNKS
+
+```
+
 
 # 参考资料
 * [habitat-sim](https://github.com/facebookresearch/habitat-sim/tree/v0.1.7#installation)
