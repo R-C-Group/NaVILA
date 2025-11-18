@@ -298,3 +298,5 @@ OpenGL renderer string: NVIDIA GeForce RTX 4090/PCIe/SSE2
 * [habitat-lab](https://github.com/facebookresearch/habitat-lab)
 * [MatterPort3D 数据集 多途径下载](https://blog.csdn.net/qq_41204464/article/details/149549133)
 * [关于MP3D没有.glb文件](https://github.com/GuoPingPan/Habitat-Sim-Usage-Chinese/issues/2)
+* [NaVILA-Dataset](https://huggingface.co/datasets/a8cheng/NaVILA-Dataset)
+* [NaVILA复现踩坑记录](https://zhuanlan.zhihu.com/p/1942233936064385661)
