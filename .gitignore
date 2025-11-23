@@ -57,9 +57,11 @@ slurm-scripts
 evaluation/habitat-lab
 evaluation/habitat-sim
 evaluation/data/scene_datasets/
+evaluation/data/datasets/
 evaluation/eval_out
 
 
 download_huggingface.py
 navila-llama3-8b-8f/*
 download_mp.py
+habitat-sim/*
