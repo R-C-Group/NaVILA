@@ -65,3 +65,4 @@ download_huggingface.py
 navila-llama3-8b-8f/*
 download_mp.py
 habitat-sim/*
+tensorboard_dirs/
