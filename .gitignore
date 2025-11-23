@@ -56,7 +56,7 @@ slurm-scripts
 # Sim
 evaluation/habitat-lab
 evaluation/habitat-sim
-evaluation/data
+evaluation/data/scene_datasets/
 evaluation/eval_out
 
 
